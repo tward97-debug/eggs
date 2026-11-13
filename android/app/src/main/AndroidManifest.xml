@@ -4,7 +4,7 @@
         android:icon="@drawable/ic_egg_empire"
         android:name="${applicationName}">
         <activity
-            android:name=".MainActivity"
+            android:name="com.triston.eggempire.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@android:style/Theme.Light.NoTitleBar"

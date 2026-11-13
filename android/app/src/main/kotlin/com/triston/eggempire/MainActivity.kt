@@ -1,4 +1,4 @@
-package com.example.egg_empire
+package com.triston.eggempire
 
 import io.flutter.embedding.android.FlutterActivity
 
