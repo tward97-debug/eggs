@@ -1,0 +1,192 @@
+{
+ "_note": "Totals are real (wiki). Max levels: real where the effect/total implies it; epic_multiplier (100) and hold_to_hatch (15) are inferred. Per-level costs follow the wiki rule cost(L)=floor((L-1)*(last-first)/(levels-1))+first, but first/last are only known for prophecy_bonus; the rest assume last = 10*first so the sum matches totalCostGE (PLACEHOLDER). Apply GOLDEN_EGG_COST_SCALE at runtime. Skipped: video doubler, hold to research, internal hatchery sharing, FTL, zero-g.",
+ "items": [
+  {
+   "id": "hold_to_hatch",
+   "name": "Hold to Hatch",
+   "effect": "holdHatchPerSec",
+   "perLevel": 2,
+   "maxLevel": 15,
+   "totalCostGE": 3825,
+   "firstCost": 46,
+   "lastCost": 464,
+   "costsExact": false
+  },
+  {
+   "id": "epic_hatchery",
+   "name": "Epic Hatchery",
+   "effect": "hatcheryRefill",
+   "perLevel": 0.1,
+   "maxLevel": 20,
+   "totalCostGE": 10011,
+   "firstCost": 91,
+   "lastCost": 910,
+   "costsExact": false
+  },
+  {
+   "id": "epic_int_hatcheries",
+   "name": "Epic Int. Hatcheries",
+   "effect": "ihrMult",
+   "perLevel": 0.05,
+   "maxLevel": 20,
+   "totalCostGE": 25241,
+   "firstCost": 229,
+   "lastCost": 2295,
+   "costsExact": false
+  },
+  {
+   "id": "epic_clucking",
+   "name": "Epic Clucking",
+   "effect": "runningBonusPerChicken",
+   "perLevel": 0.001,
+   "maxLevel": 20,
+   "totalCostGE": 50191,
+   "firstCost": 456,
+   "lastCost": 4563,
+   "costsExact": false
+  },
+  {
+   "id": "epic_multiplier",
+   "name": "Epic Multiplier",
+   "effect": "maxRunningBonus",
+   "perLevel": 2.0,
+   "maxLevel": 100,
+   "totalCostGE": 500455,
+   "firstCost": 910,
+   "lastCost": 9099,
+   "costsExact": false
+  },
+  {
+   "id": "cheaper_contractors",
+   "name": "Cheaper Contractors",
+   "effect": "habCostReduction",
+   "perLevel": 0.05,
+   "maxLevel": 10,
+   "totalCostGE": 10100,
+   "firstCost": 184,
+   "lastCost": 1836,
+   "costsExact": false
+  },
+  {
+   "id": "bust_unions",
+   "name": "Bust Unions",
+   "effect": "vehicleCostReduction",
+   "perLevel": 0.05,
+   "maxLevel": 10,
+   "totalCostGE": 10100,
+   "firstCost": 184,
+   "lastCost": 1836,
+   "costsExact": false
+  },
+  {
+   "id": "lab_upgrade",
+   "name": "Lab Upgrade",
+   "effect": "researchCostReduction",
+   "perLevel": 0.05,
+   "maxLevel": 10,
+   "totalCostGE": 10121,
+   "firstCost": 184,
+   "lastCost": 1840,
+   "costsExact": false
+  },
+  {
+   "id": "silo_capacity",
+   "name": "Silo Capacity",
+   "effect": "siloMinutesPerSilo",
+   "perLevel": 6,
+   "maxLevel": 20,
+   "totalCostGE": 14991,
+   "firstCost": 136,
+   "lastCost": 1363,
+   "costsExact": false
+  },
+  {
+   "id": "internal_hatchery_calm",
+   "name": "Internal Hatchery Calm",
+   "effect": "ihrAwayMult",
+   "perLevel": 0.1,
+   "maxLevel": 20,
+   "totalCostGE": 20091,
+   "firstCost": 183,
+   "lastCost": 1826,
+   "costsExact": false
+  },
+  {
+   "id": "accounting_tricks",
+   "name": "Accounting Tricks",
+   "effect": "farmValueMult",
+   "perLevel": 0.05,
+   "maxLevel": 20,
+   "totalCostGE": 42941,
+   "firstCost": 390,
+   "lastCost": 3904,
+   "costsExact": false
+  },
+  {
+   "id": "soul_food",
+   "name": "Soul Food",
+   "effect": "soulFood",
+   "perLevel": 0.01,
+   "maxLevel": 140,
+   "totalCostGE": 384931,
+   "firstCost": 500,
+   "lastCost": 4999,
+   "costsExact": false
+  },
+  {
+   "id": "prestige_bonus",
+   "name": "Prestige Bonus",
+   "effect": "prestigeBonus",
+   "perLevel": 0.1,
+   "maxLevel": 20,
+   "totalCostGE": 99991,
+   "firstCost": 909,
+   "lastCost": 9090,
+   "costsExact": false
+  },
+  {
+   "id": "drone_rewards",
+   "name": "Drone Rewards",
+   "effect": "droneBigRewardChance",
+   "perLevel": 0.1,
+   "maxLevel": 20,
+   "totalCostGE": 21000,
+   "firstCost": 191,
+   "lastCost": 1909,
+   "costsExact": false
+  },
+  {
+   "id": "epic_comfy_nests",
+   "name": "Epic Comfy Nests",
+   "effect": "layRate",
+   "perLevel": 0.05,
+   "maxLevel": 20,
+   "totalCostGE": 502491,
+   "firstCost": 4568,
+   "lastCost": 45681,
+   "costsExact": false
+  },
+  {
+   "id": "transportation_lobbyists",
+   "name": "Transportation Lobbyists",
+   "effect": "vehicleCapacity",
+   "perLevel": 0.05,
+   "maxLevel": 30,
+   "totalCostGE": 63736,
+   "firstCost": 386,
+   "lastCost": 3863,
+   "costsExact": false
+  },
+  {
+   "id": "prophecy_bonus",
+   "name": "Prophecy Bonus",
+   "effect": "prophecyBonus",
+   "perLevel": 0.01,
+   "maxLevel": 5,
+   "totalCostGE": 2750000,
+   "firstCost": 100000,
+   "lastCost": 1000000,
+   "costsExact": true
+  }
+ ]
+}

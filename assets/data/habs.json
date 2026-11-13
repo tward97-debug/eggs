@@ -1,0 +1,21 @@
+[
+  {"id":"coop","name":"Coop","baseCapacity":250,"maxCapacityMultiplier":3.15,"slotPrices":[13.78,35.6,68.89,118.02]},
+  {"id":"shack","name":"Shack","baseCapacity":500,"maxCapacityMultiplier":3.15,"slotPrices":[569,982,1536,2276]},
+  {"id":"super_shack","name":"Super Shack","baseCapacity":1000,"maxCapacityMultiplier":3.15,"slotPrices":[14991,28760,49987,81658]},
+  {"id":"short_house","name":"Short House","baseCapacity":2000,"maxCapacityMultiplier":3.15,"slotPrices":[416571,896836,1734149,3118140]},
+  {"id":"the_standard","name":"The Standard","baseCapacity":5000,"maxCapacityMultiplier":3.15,"slotPrices":[26204460,83270224,217759000,499867000]},
+  {"id":"long_house","name":"Long House","baseCapacity":10000,"maxCapacityMultiplier":3.15,"slotPrices":[2835000000,7282000000,16313000000,33237000000]},
+  {"id":"double_decker","name":"Double Decker","baseCapacity":20000,"maxCapacityMultiplier":3.15,"slotPrices":[106766000000,479517000000,1101000000000,2282000000000]},
+  {"id":"warehouse","name":"Warehouse","baseCapacity":50000,"maxCapacityMultiplier":3.15,"slotPrices":[21747000000000,80776000000000,237291000000000,593840000000000]},
+  {"id":"center","name":"Center","baseCapacity":100000,"maxCapacityMultiplier":3.15,"slotPrices":[3.96e15,10.698e15,24.929e15,52.427e15]},
+  {"id":"bunker","name":"Bunker","baseCapacity":200000,"maxCapacityMultiplier":3.15,"slotPrices":[305.816e15,827.007e15,1.928e18,4.058e18]},
+  {"id":"eggkea","name":"Eggkea","baseCapacity":500000,"maxCapacityMultiplier":3.15,"slotPrices":[39.804e18,149.127e18,440.336e18,1.105e21]},
+  {"id":"hab_1000","name":"HAB 1000","baseCapacity":1000000,"maxCapacityMultiplier":3.15,"slotPrices":[7.389e21,19.949e21,46.44e21,97.536e21]},
+  {"id":"hangar","name":"Hangar","baseCapacity":2000000,"maxCapacityMultiplier":3.15,"slotPrices":[566.256e21,1.527e24,3.511e24,7.449e24]},
+  {"id":"tower","name":"Tower","baseCapacity":5000000,"maxCapacityMultiplier":3.15,"slotPrices":[72.433e24,269.16e24,781.351e24,1.927e27]},
+  {"id":"hab_10000","name":"HAB 10,000","baseCapacity":10000000,"maxCapacityMultiplier":3.15,"slotPrices":[15.238e27,46.284e27,117.291e27,262.293e27]},
+  {"id":"eggtopia","name":"Eggtopia","baseCapacity":25000000,"maxCapacityMultiplier":3.15,"slotPrices":[3.58e30,15.709e30,51.253e30,137.98e30]},
+  {"id":"monolith","name":"Monolith","baseCapacity":50000000,"maxCapacityMultiplier":3.15,"slotPrices":[3.424e33,19.091e33,72.407e33,214.32e33]},
+  {"id":"planet_portal","name":"Planet Portal","baseCapacity":100000000,"maxCapacityMultiplier":4.725,"slotPrices":[10.478e36,71.722e36,291.813e36,877.951e36]},
+  {"id":"chicken_universe","name":"Chicken Universe","baseCapacity":600000000,"maxCapacityMultiplier":4.725,"slotPrices":[393.113e39,4.387e42,23.74e42,87.067e42]}
+]

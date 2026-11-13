@@ -1,0 +1,6 @@
+[
+  {"id":"best_bird_feed","name":"Jimbo's Best Bird Feed","effect":"earnings","multiplier":50,"durationSeconds":600,"priceGoldenEggs":2500},
+  {"id":"tachyon_prism","name":"Tachyon Prism","effect":"internalHatchery","multiplier":1000,"durationSeconds":600,"priceGoldenEggs":12000},
+  {"id":"boost_beacon","name":"Boost Beacon","effect":"boostBeacon","multiplier":50,"durationSeconds":600,"priceGoldenEggs":50000},
+  {"id":"soul_beacon","name":"Soul Beacon","effect":"soulEggGain","multiplier":500,"durationSeconds":600,"priceGoldenEggs":10000}
+]

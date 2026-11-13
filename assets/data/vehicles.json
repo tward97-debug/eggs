@@ -1,0 +1,14 @@
+[
+  {"id":"trike","name":"Trike","capacityPerMinute":5000,"firstPrice":0},
+  {"id":"transit_van","name":"Transit Van","capacityPerMinute":15000,"firstPrice":544},
+  {"id":"pickup","name":"Pickup","capacityPerMinute":50000,"firstPrice":52868},
+  {"id":"ten_foot","name":"10 Foot","capacityPerMinute":100000,"firstPrice":14.962e6},
+  {"id":"twenty_four_foot","name":"24 Foot","capacityPerMinute":250000,"firstPrice":4.358e9},
+  {"id":"semi","name":"Semi","capacityPerMinute":500000,"firstPrice":58.164e12},
+  {"id":"double_semi","name":"Double Semi","capacityPerMinute":1000000,"firstPrice":593.97e15},
+  {"id":"future_semi","name":"Future Semi","capacityPerMinute":5000000,"firstPrice":5.084e21},
+  {"id":"mega_semi","name":"Mega Semi","capacityPerMinute":15000000,"firstPrice":33.474e24},
+  {"id":"hover_semi","name":"Hover Semi","capacityPerMinute":30000000,"firstPrice":1.616e30},
+  {"id":"quantum_transporter","name":"Quantum Transporter","capacityPerMinute":50000000,"firstPrice":5.576e33},
+  {"id":"hyperloop_train","name":"Hyperloop Train","capacityPerMinute":50000000,"firstPrice":21.124e36}
+]
