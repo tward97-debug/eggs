@@ -13,32 +13,33 @@ class BalanceConfig {
   static const int maximumHabCount = 4;
   static const double baseEggsPerChickenPerMinute = 2;
   static const double baseHatcheryCapacity = 250;
-  // TODO: verify against wiki; hatchery refill is a placeholder.
-  static const double hatcheryRefillPerMin = 360;
-  // TODO: verify against wiki; hold-to-hatch base speed is a placeholder.
-  static const double baseHoldHatchPerSec = 10;
+  // TUNABLE: not wiki data. Fast enough that income, not the hatchery, is
+  // what paces the first eggs.
+  static const double hatcheryRefillPerMin = 900;
+  static const double baseHoldHatchPerSec = 20;
   static const double hatchTapBatchSize = 6;
   static const bool hapticFeedbackDefaultEnabled = true;
   static const int hapticFeedbackThrottleMilliseconds = 100;
   static const double hatcheryProgressMinimum = 0;
   static const double hatcheryProgressMaximum = 1;
-  // TODO: verify against wiki; silo count and base away time are placeholders.
+  // Wiki: one free silo, one hour each; the standard permit allows two
+  // silos and pays offline earnings at half rate.
   static const int initialSiloCount = 1;
+  static const int maximumSiloCount = 2;
+  static const double offlineEarningsFraction = 0.5;
   static const double siloBaseMinutes = 60;
   static const int siloEpicMinutesPerLevel = 6;
   static const int offlineProgressChunkSeconds = 60;
   static const int offlineProgressMaxChunkSteps = 600;
   static const int offlineWelcomeBackThresholdSeconds = 30;
   static const int autosaveIntervalSeconds = 15;
-  static const int saveFormatVersion = 1;
+  static const int saveFormatVersion = 2;
   static const String savePreferenceKey = 'egg_empire_save';
   static const double baseResearchMultiplier = 1;
-  static const int lateCommonResearchCostTier = 6;
-  static const double lateCommonResearchCostMultiplier = 10;
-  static const double highImpactEggResearchMinCostGrowthPerLevel = 5;
+
   /// PLACEHOLDER running-chicken window and base bonus values.
   static const double runningChickenDurationSeconds = 15;
-  static const double runningChickenBonusPerChicken = 0.005;
+  static const double runningChickenBonusPerChicken = 0.01;
   static const double baseMaximumRunningChickenBonus = 5;
   static const bool piggyBankEnabled = true;
   static const double piggyBankResearchReward = 3;
@@ -92,27 +93,7 @@ class BalanceConfig {
 
   static const double goldenEggCostScale = 0.01;
 
-  // TODO: verify against wiki; the Quantum threshold is explicitly a placeholder.
-  static const Map<String, double> placeholderEggUpgradeFarmValues = {
-    'quantum': 4e19,
-  };
-
-  /// PLACEHOLDER: the real farm-value definition is not known.
-  static const double farmValueSpentWeight = 1.0;
-
-  /// PLACEHOLDER: the real farm-value definition is not known.
-  static const double farmValueIncomeExponent = 0.8;
-
-  /// PLACEHOLDER: the real farm-value definition is not known.
-  static const double farmValueIncomeWindowSec = 600;
-  static const double droneSmallFarmValueFraction = 0.02;
-  static const double droneMediumFarmValueFraction = 0.10;
-  static const double droneLargeFarmValueFraction = 0.30;
   static const int balanceSimulationPaybackLookaheadSeconds = 300;
-
-  /// TUNABLE: old-version Soul Egg calculation power from the project spec.
-  static const double soulEggGainExponent = 0.15;
-  static const double soulEggCashDivisor = 1000000;
 
   /// TUNABLE: base Soul Egg bonus before Soul Food research.
   static const double basePerSoulEggEarningsBonus = 0.10;
@@ -133,8 +114,7 @@ class BalanceConfig {
   static const double droneFlightDurationSec = 0.6;
   static const double droneButtonDiameter = 56;
   static const double droneButtonLabelFontSize = 11;
-  static const double droneCashTextRightPadding =
-      droneButtonDiameter + 8;
+  static const double droneCashTextRightPadding = droneButtonDiameter + 8;
   static const double managementSheetHeightFraction = 0.95;
   static const double managementMenuContentPadding = 16;
   static const double managementMenuItemSpacing = 8;
@@ -167,7 +147,14 @@ class BalanceConfig {
   /// PLACEHOLDER: normal drone reward values and tier weights.
   static const List<double> droneGoldenEggRewards = [3, 6, 12];
   static const List<double> droneGoldenEggTierWeights = [70, 25, 5];
-  static const List<double> droneCashRewardFractions = [0.02, 0.10, 0.30];
+
+  /// TUNABLE: wiki farm value is roughly a thousand minutes of income, so
+  /// drone cash is a small fraction of it.
+  static const List<double> droneCashRewardFractions = [
+    0.00001,
+    0.00005,
+    0.00025,
+  ];
   static const List<double> droneCashTierWeights = [70, 25, 5];
 
   /// PLACEHOLDER: elite drone Golden Egg outcomes and tier weights.
@@ -177,10 +164,6 @@ class BalanceConfig {
   /// PLACEHOLDER: faster taps and Drone Rewards shift weight to the top tier.
   static const double droneFastTapMaxWeightShift = 20;
   static const double droneEpicWeightShiftPerEffect = 5;
-
-  /// PLACEHOLDER: low-cost boost tiers use these multipliers and price shares.
-  static const List<double> placeholderBoostMultipliers = [2, 5, 10];
-  static const List<double> placeholderBoostPriceFractions = [0.01, 0.03, 0.10];
 
   /// Chicken counts required for Bronze through Diamond trophies (wiki data).
   static const List<double> trophyChickenCountThresholds = [
@@ -210,19 +193,19 @@ class BalanceConfig {
     'fusion': [100e3, 500e3, 2.5e6, 50e6],
     'quantum': [50e3, 250e3, 1e6, 10e6],
     'tachyon': [25e3, 175e3, 1e6, 10e6],
-    'graviton': [10e3, 100e3, 1e6, 10e6, 25e9],
+    'amberleaf': [10e3, 100e3, 1e6, 10e6, 25e9],
   };
 
   /// Golden Egg trophy rewards by egg ID and trophy tier (wiki data).
   static const Map<String, List<double>> trophyGoldenEggRewards = {
-    'dilithium': [3e3, 4e3, 5e3, 10e3, 25e3],
-    'prodigy': [3e3, 4e3, 5e3, 10e3, 20e3],
-    'terraform': [3e3, 4e3, 5e3, 9e3, 17.5e3],
-    'antimatter': [3e3, 4e3, 5e3, 8e3, 15e3],
-    'dark_matter': [3e3, 4e3, 5e3, 7.5e3, 12.5e3],
-    'ai': [3e3, 4e3, 5e3, 7e3, 10e3],
-    'nebula': [3e3, 4e3, 5e3, 7e3, 10e3],
-    'universe': [3e3, 4e3, 5e3, 7e3, 10e3],
+    'cinder': [3e3, 4e3, 5e3, 10e3, 25e3],
+    'lumen': [3e3, 4e3, 5e3, 10e3, 20e3],
+    'tempest': [3e3, 4e3, 5e3, 9e3, 17.5e3],
+    'verdant': [3e3, 4e3, 5e3, 8e3, 15e3],
+    'obsidian': [3e3, 4e3, 5e3, 7.5e3, 12.5e3],
+    'tidal': [3e3, 4e3, 5e3, 7e3, 10e3],
+    'aether': [3e3, 4e3, 5e3, 7e3, 10e3],
+    'parallax': [3e3, 4e3, 5e3, 7e3, 10e3],
   };
 
   /// Diamond Prophecy Egg rewards by egg ID (wiki data).
@@ -234,9 +217,9 @@ class BalanceConfig {
     'super_material': 1,
     'fusion': 1,
     'quantum': 1,
-    'crispr': 1,
+    'immortality': 1,
     'tachyon': 1,
-    'enlightenment': 10,
+    'eventide': 10,
   };
 
   /// PLACEHOLDER: later eggs grant one Prophecy Egg for their top trophy.
@@ -251,5 +234,4 @@ class BalanceConfig {
     5,
     10,
   ];
-
 }

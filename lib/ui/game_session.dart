@@ -14,6 +14,7 @@ class GameSession extends ChangeNotifier {
     required GameSaveRepository saveRepository,
     required this.lastSavedAt,
     this.offlineProgress,
+    this.oldSaveWasReset = false,
   }) : _saveRepository = saveRepository;
 
   static Future<GameSession> restore(
@@ -22,12 +23,14 @@ class GameSession extends ChangeNotifier {
     DateTime? now,
   }) async {
     final currentTime = (now ?? DateTime.now()).toUtc();
+    final oldSaveWasReset = await saveRepository.clearIfOutdated();
     final savedGame = await saveRepository.load(data);
     if (savedGame == null) {
       final session = GameSession._(
         engine: GameEngine(data: data),
         saveRepository: saveRepository,
         lastSavedAt: currentTime,
+        oldSaveWasReset: oldSaveWasReset,
       );
       await session.save(savedAt: currentTime);
       return session;
@@ -57,6 +60,9 @@ class GameSession extends ChangeNotifier {
   late final GameTicker _ticker = GameTicker(engine);
   DateTime lastSavedAt;
   OfflineProgress? offlineProgress;
+
+  /// True when a save from before the rebalance was wiped on this launch.
+  final bool oldSaveWasReset;
   void Function(Object error)? onPersistenceError;
 
   double _holdAccumulator = 0;

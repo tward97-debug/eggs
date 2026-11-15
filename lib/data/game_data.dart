@@ -36,10 +36,6 @@ class GameDataLoader {
         _requiredList(commonJson, 'tierUnlockTotalLevels'),
         'common research tier unlocks',
       ),
-      commonResearchTierBaseCostGrowth:
-          _optionalNumber(commonJson, 'tierBaseCostGrowth', 45),
-      commonResearchLevelCostCurveExponent:
-          _optionalNumber(commonJson, 'levelCostCurveExponent', 1),
       boosts: _parseList(boostJson, BoostData.fromJson),
     );
     data.validate();
@@ -76,19 +72,4 @@ List<Object?> _requiredList(Map<String, Object?> json, String key) {
     throw FormatException('Expected "$key" to be a JSON array.');
   }
   return value;
-}
-
-double _optionalNumber(
-  Map<String, Object?> json,
-  String key,
-  double defaultValue,
-) {
-  final value = json[key];
-  if (value == null) {
-    return defaultValue;
-  }
-  if (value is! num || !value.toDouble().isFinite) {
-    throw FormatException('Expected "$key" to be a finite number.');
-  }
-  return value.toDouble();
 }

@@ -60,9 +60,15 @@ void main() {
       );
 
       expect(session.startHatching(), 6);
-      expect(session.advance(1), 10);
-      expect(session.engine.state.hatcheryStock, 234);
-      expect(session.engine.state.chickens, 16);
+      expect(session.advance(1), BalanceConfig.baseHoldHatchPerSec);
+      expect(
+        session.engine.state.hatcheryStock,
+        244 - BalanceConfig.baseHoldHatchPerSec,
+      );
+      expect(
+        session.engine.state.chickens,
+        6 + BalanceConfig.baseHoldHatchPerSec,
+      );
 
       session.dispose();
     });
@@ -74,7 +80,10 @@ void main() {
       );
       session.engine.state.epicResearchLevels['hold_to_hatch'] = 1;
 
-      expect(session.engine.holdHatchPerSecond, 12);
+      expect(
+        session.engine.holdHatchPerSecond,
+        BalanceConfig.baseHoldHatchPerSec + 2,
+      );
 
       session.dispose();
     });
@@ -136,9 +145,11 @@ void main() {
       );
 
       session.startHatching();
-      expect(session.advance(0.05), 0);
+      // Half a chicken per update at the base hold rate.
+      final halfChicken = 0.5 / BalanceConfig.baseHoldHatchPerSec;
+      expect(session.advance(halfChicken), 0);
       expect(session.engine.state.hatcheryStock, 244);
-      expect(session.advance(0.05), 1);
+      expect(session.advance(halfChicken), 1);
       expect(session.engine.state.hatcheryStock, 243);
       expect(session.engine.state.chickens, 7);
 
@@ -156,7 +167,10 @@ void main() {
       expect(session.startHatching(), 0);
       session.advance(1);
 
-      expect(session.engine.state.hatcheryStock, closeTo(6, 1e-9));
+      expect(
+        session.engine.state.hatcheryStock,
+        closeTo(BalanceConfig.hatcheryRefillPerMin / 60, 1e-9),
+      );
       expect(
         session.engine.hatcheryRefillPerMinute,
         BalanceConfig.hatcheryRefillPerMin,
@@ -283,7 +297,7 @@ void main() {
     await session.close();
   });
 
-  test('offline simulation matches 600 one-second game updates', () {
+  test('offline simulation matches 600 one-second updates at half pay', () {
     final offlineEngine = GameEngine(data: data);
     final onlineEngine = GameEngine(data: data);
     for (final engine in [offlineEngine, onlineEngine]) {
@@ -302,10 +316,14 @@ void main() {
         closeTo(onlineEngine.state.chickens, 0.001));
     expect(offlineEngine.state.hatcheryStock,
         closeTo(onlineEngine.state.hatcheryStock, 0.001));
-    expect(offlineEngine.state.cash, closeTo(onlineEngine.state.cash, 0.1));
+    const awayPay = BalanceConfig.offlineEarningsFraction;
+    expect(
+      offlineEngine.state.cash,
+      closeTo(onlineEngine.state.cash * awayPay, 0.1),
+    );
     expect(
       offlineEngine.state.cashEarnedThisRun,
-      closeTo(onlineEngine.state.cashEarnedThisRun, 0.1),
+      closeTo(onlineEngine.state.cashEarnedThisRun * awayPay, 0.1),
     );
   });
 

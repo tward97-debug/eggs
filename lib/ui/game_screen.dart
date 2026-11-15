@@ -10,6 +10,7 @@ import '../config/balance.dart';
 import '../data/game_data.dart';
 import '../game/engine.dart';
 import '../game/format_number.dart' as number_format;
+import 'farm_view.dart';
 import 'research_effect_description.dart';
 import 'game_session.dart';
 
@@ -349,6 +350,13 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
             preferences.getBool(BalanceConfig.offlineSummaryPreferenceKey) ??
                 BalanceConfig.showOfflineSummaryDefault;
       });
+      if (_session.oldSaveWasReset) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showOldSaveReset();
+          }
+        });
+      }
       final progress = _session.offlineProgress;
       if (_showOfflineSummary &&
           progress != null &&
@@ -416,6 +424,25 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$message: $error')),
+    );
+  }
+
+  Future<void> _showOldSaveReset() {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fresh start'),
+        content: const Text(
+          'This update rebalanced the whole game, so your old farm could not '
+          'be carried over. You are starting a new one.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -543,309 +570,68 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     );
   }
 
+  static const _menuPages = <(int, String, IconData)>[
+    (1, 'Research', Icons.science_outlined),
+    (4, 'Boosts', Icons.bolt_outlined),
+    (2, 'Prestige', Icons.auto_awesome_outlined),
+    (3, 'Trophies', Icons.emoji_events_outlined),
+    (5, 'Settings', Icons.settings_outlined),
+  ];
+
   Widget _buildScaffold(GameSession session) {
     final pages = [
-      _buildFarmPage(),
+      FarmView(
+        engine: _engine,
+        formatNumber: formatNumber,
+        droneProgress: _hasActiveDrone ? _droneFlightProgress : null,
+        onCollectDrone: _collectDrone,
+        onHatchStart: _startHatching,
+        onHatchStop: _session.stopHatching,
+        onAscend: _confirmAscend,
+        onOpenHabitats: _showHabitatsMenu,
+        onOpenTransport: _showTransportMenu,
+        onOpenSilos: _showSilosMenu,
+        onOpenPage: (page) => setState(() => _selectedPage = page),
+        menuPages: _menuPages,
+      ),
       _buildResearchPage(),
       _buildPrestigePage(),
       _buildTrophiesPage(),
       _buildBoostsPage(),
       _buildSettingsPage(),
     ];
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Egg Empire'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text(
-                'Egg tier ${session.engine.eggIndex + 1}',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: IndexedStack(
-              index: _selectedPage,
-              children: pages,
-            ),
-          ),
-          if (_droneRewardMessage case final message?)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: _DroneRewardEffect(
-                  key: ValueKey(_droneRewardEffectSequence),
-                  message: message,
-                  isGoldenEggReward: _droneRewardIsGoldenEgg,
-                  onFinished: () => _dismissDroneRewardEffect(
-                    _droneRewardEffectSequence,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedPage,
-        onDestinationSelected: (index) {
-          setState(() => _selectedPage = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.agriculture_outlined),
-            selectedIcon: Icon(Icons.agriculture),
-            label: 'Farm',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.science_outlined),
-            selectedIcon: Icon(Icons.science),
-            label: 'Research',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome),
-            label: 'Prestige',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.emoji_events_outlined),
-            selectedIcon: Icon(Icons.emoji_events),
-            label: 'Trophies',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bolt_outlined),
-            selectedIcon: Icon(Icons.bolt),
-            label: 'Boosts',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFarmPage() {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildFarmCashPanel(theme),
-        if (_engine.eggsBackingUp)
-          Card(
-            color: theme.colorScheme.errorContainer,
-            child: const ListTile(
-              leading: Icon(Icons.warning_amber_rounded),
-              title: Text('Eggs are backing up'),
-              subtitle: Text('Add transport capacity to ship the whole flock.'),
-            ),
-          ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Text(
-                  'Chickens: ${formatNumber(_engine.state.chickens)}'
-                  ' / ${formatNumber(_engine.totalHabCapacity)}',
-                  style: theme.textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${formatNumber(_engine.eggsLaidPerMinute)} eggs/min laid · '
-                  '${formatNumber(_engine.shipCapacityPerMinute)} eggs/min '
-                  'transport',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value:
-                      (_engine.state.hatcheryStock / _engine.hatcheryCapacity)
-                          .clamp(
-                            BalanceConfig.hatcheryProgressMinimum,
-                            BalanceConfig.hatcheryProgressMaximum,
-                          )
-                          .toDouble(),
-                  semanticsLabel: 'Hatchery stock',
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Ready chickens: '
-                  '${formatNumber(_engine.state.hatcheryStock)} / '
-                  '${formatNumber(_engine.hatcheryCapacity)}',
-                ),
-                const SizedBox(height: 8),
-                Listener(
-                  onPointerDown: (_) => _startHatching(),
-                  onPointerUp: (_) => _session.stopHatching(),
-                  onPointerCancel: (_) => _session.stopHatching(),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.egg_alt),
-                      label: Text(
-                        'Tap to hatch '
-                        '${formatNumber(BalanceConfig.hatchTapBatchSize)} '
-                        'or hold',
-                      ),
-                    ),
-                  ),
-                ),
-                Text(
-                  'Holding hatches '
-                  '${formatNumber(_engine.holdHatchPerSecond)} chickens/sec',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Internal hatcheries: '
-                  '${formatNumber(_engine.flatResearchBonus('ihrPerHab'))} '
-                  'chickens/min per habitat',
-                  style: theme.textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: const ValueKey('open-habitats'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: Size.fromHeight(
-                            BalanceConfig.managementButtonMinimumHeight,
-                          ),
-                        ),
-                        onPressed: _showHabitatsMenu,
-                        icon: const Icon(Icons.home_work_outlined),
-                        label: const Text('Habitats'),
-                      ),
-                    ),
-                    const SizedBox(
-                      width: BalanceConfig.managementMenuItemSpacing,
-                    ),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: const ValueKey('open-transport'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: Size.fromHeight(
-                            BalanceConfig.managementButtonMinimumHeight,
-                          ),
-                        ),
-                        onPressed: _showTransportMenu,
-                        icon: const Icon(Icons.local_shipping_outlined),
-                        label: const Text('Transport'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFarmCashPanel(ThemeData theme) {
-    return Card(
-      key: const ValueKey('farm-cash-panel'),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Stack(
+    return PopScope(
+      canPop: _selectedPage == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          setState(() => _selectedPage = 0);
+        }
+      },
+      child: Scaffold(
+        body: Stack(
           children: [
-            Padding(
-              key: const ValueKey('cash-panel-text-reserved-space'),
-              padding: const EdgeInsets.only(
-                right: BalanceConfig.droneCashTextRightPadding,
-              ),
+            SafeArea(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Farm cash', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    formatNumber(_engine.state.cash),
-                    style: theme.textTheme.headlineMedium,
-                  ),
-                  Text('${formatNumber(_engine.cashPerSecond)}/sec'),
-                  Text(
-                    'Running chicken bonus ×'
-                    '${formatNumber(_engine.runningChickenMultiplier)} · '
-                    '${formatNumber(_engine.runningChickenCount)} runners',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  if (_engine.nextEggUpgradeFarmValue case final threshold?)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Farm value: ${formatNumber(_engine.farmValue)} / '
-                          '${formatNumber(threshold)}',
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: (_engine.farmValue / threshold)
-                              .clamp(
-                                BalanceConfig.hatcheryProgressMinimum,
-                                BalanceConfig.hatcheryProgressMaximum,
-                              )
-                              .toDouble(),
-                          semanticsLabel: 'Farm value progress',
-                        ),
-                      ],
-                    )
-                  else
-                    Text('Farm value: ${formatNumber(_engine.farmValue)}'),
-                  if (_engine.canAscend)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                        onPressed: _confirmAscend,
-                        icon: const Icon(Icons.arrow_upward),
-                        label: Text(
-                          'Ascend to egg tier ${_engine.eggIndex + 2}',
-                        ),
-                      ),
+                  if (_selectedPage != 0) _buildPageHeader(),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _selectedPage,
+                      children: pages,
                     ),
-                  const Divider(height: 28),
-                  Text(
-                    'Egg tier ${_engine.eggIndex + 1} · '
-                    '${formatNumber(_engine.currentEgg.valuePerEgg)} per egg',
                   ),
                 ],
               ),
             ),
-            if (_hasActiveDrone)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: SizedBox(
-                  width: BalanceConfig.droneButtonDiameter,
-                  height: BalanceConfig.droneButtonDiameter,
-                  child: FilledButton(
-                    key: const ValueKey('drone-button'),
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      padding: EdgeInsets.zero,
-                      backgroundColor: Colors.deepOrange,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: _collectDrone,
-                    child: const Text(
-                      'Drone',
-                      style: TextStyle(
-                        fontSize: BalanceConfig.droneButtonLabelFontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
+            if (_droneRewardMessage case final message?)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: _DroneRewardEffect(
+                    key: ValueKey(_droneRewardEffectSequence),
+                    message: message,
+                    isGoldenEggReward: _droneRewardIsGoldenEgg,
+                    onFinished: () => _dismissDroneRewardEffect(
+                      _droneRewardEffectSequence,
                     ),
                   ),
                 ),
@@ -856,14 +642,78 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     );
   }
 
+  /// Non-farm pages sit over the farm with a way back and the balances.
+  Widget _buildPageHeader() {
+    final title =
+        _menuPages.firstWhere((entry) => entry.$1 == _selectedPage).$2;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 16, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Back to farm',
+            onPressed: () => setState(() => _selectedPage = 0),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              key: const ValueKey('page-title'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          Text(
+            '\$${formatNumber(_engine.state.cash)} · '
+            '${formatNumber(_engine.state.goldenEggs)} GE',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSilosMenu() => _showManagementMenu(
+        title: 'Silos',
+        icon: Icons.warehouse_outlined,
+        children: (setSheetState) => [
+          Card(
+            child: ListTile(
+              title: Text(
+                '${_engine.state.siloCount} of '
+                '${BalanceConfig.maximumSiloCount} silos',
+              ),
+              subtitle: Text(
+                'Each silo keeps the farm running for '
+                '${formatNumber(_engine.siloMinutes)} minutes while you are '
+                'away. Away earnings are paid at '
+                '${formatNumber(BalanceConfig.offlineEarningsFraction * 100)}'
+                '%.',
+              ),
+            ),
+          ),
+          if (_engine.nextSiloPrice.isFinite)
+            FilledButton(
+              key: const ValueKey('buy-silo'),
+              onPressed: _engine.state.cash >= _engine.nextSiloPrice
+                  ? () {
+                      _mutate(_engine.buySilo);
+                      setSheetState(() {});
+                    }
+                  : null,
+              child: Text(
+                'Build a silo · \$${formatNumber(_engine.nextSiloPrice)}',
+              ),
+            ),
+        ],
+      );
+
   Future<void> _confirmAscend() async {
-    final nextTier = _engine.eggIndex + 2;
+    final nextEgg = widget.data.eggs[_engine.eggIndex + 1].name;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ascend to a new egg tier?'),
+        title: Text('Upgrade to $nextEgg eggs?'),
         content: Text(
-          'This starts a new farm on egg tier $nextTier. '
+          'This sells the farm and starts a new one laying $nextEgg eggs. '
           'Your prestige earnings are preserved.',
         ),
         actions: [
@@ -873,7 +723,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ascend'),
+            child: const Text('Upgrade'),
           ),
         ],
       ),
@@ -1663,8 +1513,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
               remaining > 0
                   ? 'Active · ×${formatNumber(activeMultiplier)} · '
                       '${_formatBoostTime(remaining)} remaining'
-                  : '${_boostEffectLabel(boost.effect)} · '
-                      '${_formatBoostTime(boost.durationSeconds)} duration',
+                  : _boostEffectLabel(boost.effect),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -1674,14 +1523,14 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                 for (final option in options)
                   OutlinedButton(
                     onPressed:
-                        _engine.state.goldenEggs >= option.priceGoldenEggs
+                        _engine.state.goldenEggs >= _engine.boostPrice(option)
                             ? () => _mutate(
                                   () => _engine.buyBoost(boost.id, option.id),
                                 )
                             : null,
                     child: Text(
                       '${option.label}\n'
-                      '${formatNumber(option.priceGoldenEggs)} GE',
+                      '${formatNumber(_engine.boostPrice(option))} GE',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -1767,8 +1616,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
           'Prophecy Eggs';
     }
     if (trophyIndex == BalanceConfig.trophyTierNames.length - 1) {
-      final prophecyReward =
-          BalanceConfig.prophecyEggTrophyReward(eggId);
+      final prophecyReward = BalanceConfig.prophecyEggTrophyReward(eggId);
       return '+${formatNumber(prophecyReward)} Prophecy Eggs';
     }
     return 'Reward not listed on source page';

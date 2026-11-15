@@ -6,8 +6,6 @@ class GameData {
     required this.commonResearch,
     required this.epicResearch,
     required this.commonResearchTierUnlocks,
-    required this.commonResearchTierBaseCostGrowth,
-    required this.commonResearchLevelCostCurveExponent,
     required this.boosts,
   });
 
@@ -17,8 +15,6 @@ class GameData {
   final List<ResearchData> commonResearch;
   final List<ResearchData> epicResearch;
   final List<int> commonResearchTierUnlocks;
-  final double commonResearchTierBaseCostGrowth;
-  final double commonResearchLevelCostCurveExponent;
   final List<BoostData> boosts;
 
   void validate() {
@@ -43,13 +39,8 @@ class GameData {
         'Common research tier unlocks must start with zero.',
       );
     }
-    if (!commonResearchTierBaseCostGrowth.isFinite ||
-        commonResearchTierBaseCostGrowth <= 0 ||
-        !commonResearchLevelCostCurveExponent.isFinite ||
-        commonResearchLevelCostCurveExponent <= 0) {
-      throw const FormatException(
-        'Common research cost tuning values must be finite and positive.',
-      );
+    if (boosts.any((boost) => boost.options.isEmpty)) {
+      throw const FormatException('Every boost needs at least one option.');
     }
   }
 }
@@ -158,6 +149,7 @@ class ResearchData {
     required this.mode,
     required this.firstCost,
     required this.lastCost,
+    this.costs = const [],
   });
 
   final String id;
@@ -170,18 +162,31 @@ class ResearchData {
   final double firstCost;
   final double lastCost;
 
+  /// Common research only: the price of each level, in order.
+  final List<double> costs;
+
   factory ResearchData.fromJson(Object? value, {required bool isEpic}) {
     final json = _asObject(value);
+    final costs = isEpic
+        ? const <double>[]
+        : _numberList(_requiredList(json, 'costs'), 'costs');
+    final maxLevel = _requiredInteger(json, 'maxLevel');
+    if (!isEpic && costs.length != maxLevel) {
+      throw FormatException(
+        'Research ${_requiredString(json, 'id')} needs one cost per level.',
+      );
+    }
     return ResearchData(
       id: _requiredString(json, 'id'),
       name: _requiredString(json, 'name'),
       effect: _requiredString(json, 'effect'),
       perLevel: _requiredNumber(json, 'perLevel'),
-      maxLevel: _requiredInteger(json, 'maxLevel'),
+      maxLevel: maxLevel,
       tier: isEpic ? null : _requiredInteger(json, 'tier'),
       mode: isEpic ? null : _requiredString(json, 'mode'),
-      firstCost: _requiredNumber(json, 'firstCost'),
-      lastCost: _requiredNumber(json, 'lastCost'),
+      firstCost: isEpic ? _requiredNumber(json, 'firstCost') : costs.first,
+      lastCost: isEpic ? _requiredNumber(json, 'lastCost') : costs.last,
+      costs: costs,
     );
   }
 }
@@ -191,27 +196,55 @@ class BoostData {
     required this.id,
     required this.name,
     required this.effect,
-    required this.multiplier,
-    required this.durationSeconds,
-    required this.priceGoldenEggs,
+    required this.options,
   });
 
   final String id;
   final String name;
   final String effect;
-  final double multiplier;
-  final double durationSeconds;
-  final double priceGoldenEggs;
+  final List<BoostOption> options;
 
   factory BoostData.fromJson(Object? value) {
     final json = _asObject(value);
+    final id = _requiredString(json, 'id');
+    final options = _requiredList(json, 'options');
     return BoostData(
-      id: _requiredString(json, 'id'),
+      id: id,
       name: _requiredString(json, 'name'),
       effect: _requiredString(json, 'effect'),
+      options: [
+        for (var index = 0; index < options.length; index++)
+          BoostOption.fromJson(options[index], id: '$id:$index'),
+      ],
+    );
+  }
+}
+
+class BoostOption {
+  const BoostOption({
+    required this.id,
+    required this.label,
+    required this.multiplier,
+    required this.priceGoldenEggs,
+    required this.durationSeconds,
+  });
+
+  final String id;
+  final String label;
+  final double multiplier;
+
+  /// Unscaled wiki price; the engine applies the Golden Egg cost scale.
+  final double priceGoldenEggs;
+  final double durationSeconds;
+
+  factory BoostOption.fromJson(Object? value, {required String id}) {
+    final json = _asObject(value);
+    return BoostOption(
+      id: id,
+      label: _requiredString(json, 'label'),
       multiplier: _requiredNumber(json, 'multiplier'),
-      durationSeconds: _requiredNumber(json, 'durationSeconds'),
       priceGoldenEggs: _requiredNumber(json, 'priceGoldenEggs'),
+      durationSeconds: _requiredNumber(json, 'durationSeconds'),
     );
   }
 }

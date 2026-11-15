@@ -3,39 +3,6 @@ import 'dart:math' as math;
 import '../config/balance.dart';
 import 'models/game_data.dart';
 
-class FarmValueTuning {
-  const FarmValueTuning({
-    required this.spentWeight,
-    required this.incomeExponent,
-    required this.incomeWindowSec,
-  });
-
-  const FarmValueTuning.configured()
-      : spentWeight = BalanceConfig.farmValueSpentWeight,
-        incomeExponent = BalanceConfig.farmValueIncomeExponent,
-        incomeWindowSec = BalanceConfig.farmValueIncomeWindowSec;
-
-  final double spentWeight;
-  final double incomeExponent;
-  final double incomeWindowSec;
-}
-
-class BoostOption {
-  const BoostOption({
-    required this.id,
-    required this.label,
-    required this.multiplier,
-    required this.priceGoldenEggs,
-    required this.durationSeconds,
-  });
-
-  final String id;
-  final String label;
-  final double multiplier;
-  final double priceGoldenEggs;
-  final double durationSeconds;
-}
-
 class DroneReward {
   const DroneReward({
     required this.goldenEggs,
@@ -69,12 +36,10 @@ class GameEngine {
   GameEngine({
     required this.data,
     GameState? state,
-    this.farmValueTuning = const FarmValueTuning.configured(),
   }) : state = state ?? GameState.newGame();
 
   final GameData data;
   final GameState state;
-  final FarmValueTuning farmValueTuning;
 
   int get eggIndex => state.eggIndex;
 
@@ -108,7 +73,8 @@ class GameEngine {
       );
 
   /// Multiplies the common lay-rate research factors from the research data.
-  double get layRateMultiplier => researchMultiplier('layRate');
+  double get layRateMultiplier =>
+      researchMultiplier('layRate') * epicResearchMultiplier('layRate');
 
   /// Multiplies common egg-value research factors from the research data.
   double get eggValueMultiplier => researchMultiplier('eggValue');
@@ -116,7 +82,8 @@ class GameEngine {
   /// Applies the spec's vehicle-speed-as-shipping-capacity assumption.
   double get vehicleCapacityMultiplier =>
       researchMultiplier('vehicleCapacity') *
-      researchMultiplier('vehicleSpeed');
+      researchMultiplier('vehicleSpeed') *
+      epicResearchMultiplier('vehicleCapacity');
 
   /// Uses the wiki base rate of two eggs per chicken per minute.
   double get eggsLaidPerMinute =>
@@ -217,8 +184,7 @@ class GameEngine {
     if (boost == null || (state.activeBoostSeconds[boost.id] ?? 0) <= 0) {
       return 1;
     }
-    final multiplier =
-        state.activeBoostMultipliers[boost.id] ?? boost.multiplier;
+    final multiplier = state.activeBoostMultipliers[boost.id] ?? 1;
     if (effect == 'boostBeacon') {
       return multiplier;
     }
@@ -230,53 +196,33 @@ class GameEngine {
     if (boost == null || (state.activeBoostSeconds[id] ?? 0) <= 0) {
       return 1;
     }
-    return state.activeBoostMultipliers[id] ?? boost.multiplier;
+    return state.activeBoostMultipliers[id] ?? 1;
   }
 
-  /// Lists PLACEHOLDER low-cost options and the data-defined full boost.
-  List<BoostOption> boostOptions(String boostId) {
-    final boost = _boostItem(boostId);
-    final cheapOptions = <BoostOption>[
-      for (var index = 0;
-          index < BalanceConfig.placeholderBoostMultipliers.length;
-          index++)
-        BoostOption(
-          id: '$boostId:basic-$index',
-          label: 'Basic ×${BalanceConfig.placeholderBoostMultipliers[index]}',
-          multiplier: BalanceConfig.placeholderBoostMultipliers[index],
-          priceGoldenEggs: boost.priceGoldenEggs *
-              BalanceConfig.goldenEggCostScale *
-              BalanceConfig.placeholderBoostPriceFractions[index],
-          durationSeconds: boost.durationSeconds,
-        ),
-    ];
-    return [
-      ...cheapOptions,
-      BoostOption(
-        id: '$boostId:full',
-        label: 'Full ×${_formatMultiplier(boost.multiplier)}',
-        multiplier: boost.multiplier,
-        priceGoldenEggs:
-            boost.priceGoldenEggs * BalanceConfig.goldenEggCostScale,
-        durationSeconds: boost.durationSeconds,
-      ),
-    ];
-  }
+  /// Lists the data-defined tiers of a boost with scaled Golden Egg prices.
+  List<BoostOption> boostOptions(String boostId) => _boostItem(boostId).options;
 
   /// Spends Golden Eggs and starts or refreshes one boost of its effect.
   bool buyBoost(String boostId, String optionId) {
     final option = boostOptions(boostId)
         .where((candidate) => candidate.id == optionId)
         .firstOrNull;
-    if (option == null || state.goldenEggs < option.priceGoldenEggs) {
+    if (option == null) {
       return false;
     }
-    state.goldenEggs -= option.priceGoldenEggs;
+    final price = boostPrice(option);
+    if (state.goldenEggs < price) {
+      return false;
+    }
+    state.goldenEggs -= price;
     _addPiggyBankGoldenEggs(BalanceConfig.piggyBankBoostReward);
     state.activeBoostSeconds[boostId] = option.durationSeconds;
     state.activeBoostMultipliers[boostId] = option.multiplier;
     return true;
   }
+
+  double boostPrice(BoostOption option) =>
+      option.priceGoldenEggs * BalanceConfig.goldenEggCostScale;
 
   /// Rolls and credits a drone reward; each roll input is deterministic/testable.
   DroneReward collectDrone({
@@ -329,29 +275,29 @@ class GameEngine {
       isElite: false,
       isGoldenEggReward: false,
     );
-    state.cash += reward.cash;
-    state.cashEarnedThisPrestige += reward.cash;
-    state.cashEarnedThisRun += reward.cash;
+    _creditCash(reward.cash);
     return reward;
   }
 
-  /// Calculates the current Soul Egg award from this prestige's cash earnings.
+  /// Wiki Soul Egg formula: seven earnings bands with rising exponents.
   double get soulEggsGained {
-    final cashEarned = state.cashEarnedThisPrestige;
-    if (cashEarned <= 0) {
+    final earnings = state.cashEarnedThisPrestige;
+    if (!earnings.isFinite || earnings <= 0) {
       return 0;
     }
-    final prestigeBonus = epicResearchMultiplier('prestigeBonus');
-    final rawGain = prestigeBonus *
-        activeSoulBeaconMultiplier *
-        math.pow(
-          cashEarned / BalanceConfig.soulEggCashDivisor,
-          BalanceConfig.soulEggGainExponent,
-        );
-    if (!rawGain.isFinite || rawGain <= 0) {
-      return 0;
+    const exponents = [0.15, 0.16, 0.17, 0.18, 0.19, 0.20, 0.21];
+    const bandStarts = [1.0, 1e12, 1e21, 1e30, 1e39, 1e48, 1e60];
+    var total = 0.0;
+    for (var band = 0; band < exponents.length; band++) {
+      final bandEnd =
+          band + 1 < bandStarts.length ? bandStarts[band + 1] : double.infinity;
+      total += math.max(
+        0.0,
+        math.pow(1e-6 * math.min(earnings, bandEnd), exponents[band]) -
+            math.pow(1e-6 * bandStarts[band], exponents[band]),
+      );
     }
-    return rawGain.floorToDouble();
+    return (epicResearchMultiplier('prestigeBonus') * total).floorToDouble();
   }
 
   /// Interpolates the configured epic-research price for the next level.
@@ -410,10 +356,10 @@ class GameEngine {
       }
       final soulEggRewards = BalanceConfig.trophySoulEggRewards[eggId];
       final goldenEggRewards = BalanceConfig.trophyGoldenEggRewards[eggId];
-      final prophecyReward = eggId == 'enlightenment'
+      final prophecyReward = eggId == 'eventide'
           ? null
           : BalanceConfig.prophecyEggTrophyReward(eggId);
-      final enlightenmentRewards = eggId == 'enlightenment'
+      final enlightenmentRewards = eggId == 'eventide'
           ? BalanceConfig.enlightenmentTrophyProphecyEggRewards
           : null;
       final hasReward = (soulEggRewards != null &&
@@ -442,41 +388,55 @@ class GameEngine {
     }
   }
 
-  /// Calculates farm value through one shared formula for all game surfaces.
-  double calculateFarmValue({
-    double? spentWeight,
-    double? incomeExponent,
-    double? incomeWindowSec,
-  }) {
-    final exponent = incomeExponent ?? farmValueTuning.incomeExponent;
-    final income = incomePerSecondWithoutBoosts;
-    final projectedIncome = income <= 0 ? 0.0 : math.pow(income, exponent);
-    final unmodifiedValue = state.cashSpentThisRun *
-            (spentWeight ?? farmValueTuning.spentWeight) +
-        projectedIncome * (incomeWindowSec ?? farmValueTuning.incomeWindowSec);
-    return unmodifiedValue *
-        (BalanceConfig.baseResearchMultiplier +
-            epicResearchEffect('farmValueMult'));
+  double get siloMinutes =>
+      BalanceConfig.siloBaseMinutes +
+      BalanceConfig.siloEpicMinutesPerLevel *
+          epicResearchLevel('silo_capacity');
+
+  /// Wiki farm value formula (research only; boosts never count):
+  /// 500 * L * A * EB * V * E * (Peff + space^0.6 + H) * (RCB - 4)^0.25.
+  double get farmValue {
+    final eggsPerChicken =
+        BalanceConfig.baseEggsPerChickenPerMinute * layRateMultiplier;
+    final population = state.chickens;
+    final shippingLimit =
+        (shipCapacityPerMinute / eggsPerChicken).floorToDouble();
+    final effectivePopulation =
+        (0.8 * math.min(population, shippingLimit) + 0.2 * population)
+            .floorToDouble();
+    final emptySpace = math.max(totalHabCapacity - population, 0.0);
+    final awayHatching = flatResearchBonus('ihrPerHab') *
+        epicResearchMultiplier('ihrMult') *
+        state.siloCount *
+        siloMinutes;
+    return 500 *
+        (eggIndex + 2) *
+        (1 + epicResearchEffect('farmValueMult')) *
+        earningsMultiplier *
+        currentEgg.valuePerEgg *
+        eggValueMultiplier *
+        eggsPerChicken *
+        (effectivePopulation + math.pow(emptySpace, 0.6) + awayHatching) *
+        math.pow(maximumRunningChickenBonus - 4, 0.25);
   }
 
-  double get farmValue => calculateFarmValue();
+  /// Wiki silo price: 100,000 * (n - 1)^(n + 14) for the nth silo.
+  double get nextSiloPrice {
+    final next = state.siloCount + 1;
+    if (next > BalanceConfig.maximumSiloCount) {
+      return double.infinity;
+    }
+    return 100000 * math.pow(next - 1, next + 14).toDouble();
+  }
 
-  double get smallDroneCashReward =>
-      farmValue * BalanceConfig.droneSmallFarmValueFraction;
-
-  double get mediumDroneCashReward =>
-      farmValue * BalanceConfig.droneMediumFarmValueFraction;
-
-  double get largeDroneCashReward =>
-      farmValue * BalanceConfig.droneLargeFarmValueFraction;
+  bool buySilo() => _spendCash(nextSiloPrice, () => state.siloCount++);
 
   double? get nextEggUpgradeFarmValue {
     if (eggIndex + 1 >= data.eggs.length) {
       return null;
     }
     final nextEgg = data.eggs[eggIndex + 1];
-    return nextEgg.upgradeFarmValue ??
-        BalanceConfig.placeholderEggUpgradeFarmValues[nextEgg.id];
+    return nextEgg.upgradeFarmValue;
   }
 
   bool get canAscend {
@@ -528,9 +488,6 @@ class GameEngine {
     }
   }
 
-  static String _formatMultiplier(double multiplier) =>
-      multiplier.toStringAsFixed(0);
-
   /// Applies common habitat and portal-capacity research, respecting wiki caps.
   double capacityForHab(int tierIndex) {
     _checkIndex(tierIndex, data.habs.length, 'hab tier');
@@ -562,8 +519,10 @@ class GameEngine {
         state.habs.any((hab) => hab.slotIndex == targetSlot)) {
       return double.infinity;
     }
-    return data.habs[tierIndex].slotPrices[targetSlot];
+    return data.habs[tierIndex].slotPrices[targetSlot] * _habPriceMultiplier;
   }
+
+  double get _habPriceMultiplier => 1 - epicResearchEffect('habCostReduction');
 
   /// Interpolates the tunable normalized unit curves by vehicle tier.
   double vehiclePrice(int tierIndex, int unitNumber) {
@@ -581,7 +540,9 @@ class GameEngine {
       unitNumber,
     );
     final curve = curveA + (curveB - curveA) * tierPosition;
-    return data.vehicles[tierIndex].firstPrice * curve;
+    return data.vehicles[tierIndex].firstPrice *
+        curve *
+        (1 - epicResearchEffect('vehicleCostReduction'));
   }
 
   /// Multiplies add/mul research factors that target the requested effect.
@@ -641,52 +602,19 @@ class GameEngine {
   double epicResearchMultiplier(String effect) =>
       BalanceConfig.baseResearchMultiplier + epicResearchEffect(effect);
 
-  /// Interpolates common research costs with the supplied logarithmic rule.
+  /// Reads the wiki per-level price, less the Lab Upgrade epic discount.
   double commonResearchCost(String researchId) {
     final item = _commonResearchItem(researchId);
     final level = _researchLevel(item.id, item.maxLevel);
     if (level >= item.maxLevel) {
       return double.infinity;
     }
-    final tierGrowthMultiplier = math.pow(
-      data.commonResearchTierBaseCostGrowth / 45,
-      item.tier! - 1,
-    );
-    final lateTierCostMultiplier = item.tier! >=
-            BalanceConfig.lateCommonResearchCostTier
-        ? BalanceConfig.lateCommonResearchCostMultiplier
-        : 1.0;
-    final firstCost =
-        item.firstCost * tierGrowthMultiplier * lateTierCostMultiplier;
-    final configuredEndCostRatio = math.pow(
-      item.lastCost / item.firstCost,
-      data.commonResearchLevelCostCurveExponent,
-    );
-    final isHighImpactRepeatableEggValueResearch =
-        item.effect == 'eggValue' &&
-            item.mode == 'mul' &&
-            item.perLevel >= 2 &&
-            item.maxLevel > 1;
-    final minimumEndCostRatio = isHighImpactRepeatableEggValueResearch
-        ? math.pow(
-            BalanceConfig.highImpactEggResearchMinCostGrowthPerLevel,
-            item.maxLevel - 1,
-          )
-        : 1.0;
-    final endCostRatio = math.max(
-      configuredEndCostRatio,
-      minimumEndCostRatio,
-    );
-    final nextLevel = level + 1;
-    if (item.maxLevel == 1) {
-      return firstCost * endCostRatio;
-    }
-    final progress = (nextLevel - 1) / (item.maxLevel - 1);
-    return firstCost * math.pow(endCostRatio, progress);
+    return item.costs[level] *
+        (1 - epicResearchEffect('researchCostReduction'));
   }
 
   /// Unlocks a tier when bought research levels in all lower tiers meet its
-  /// placeholder threshold from common_research.json.
+  /// threshold from common_research.json.
   bool isCommonResearchTierUnlocked(int tier) {
     if (tier < BalanceConfig.firstResearchTier) {
       return false;
@@ -834,9 +762,7 @@ class GameEngine {
       );
       state.chickens = _chickensAfterGrowth(remainingSeconds, ihrPerSecond);
     }
-    state.cash += cashEarned;
-    state.cashEarnedThisPrestige += cashEarned;
-    state.cashEarnedThisRun += cashEarned;
+    _creditCash(cashEarned);
 
     if (refillHatchery) {
       _refillHatchery(
@@ -857,11 +783,8 @@ class GameEngine {
         'Must be finite and non-negative.',
       );
     }
-    final maximumAwaySeconds = state.siloCount *
-        (BalanceConfig.siloBaseMinutes +
-            BalanceConfig.siloEpicMinutesPerLevel *
-                epicResearchLevel('silo_capacity')) *
-        BalanceConfig.secondsPerMinute;
+    final maximumAwaySeconds =
+        state.siloCount * siloMinutes * BalanceConfig.secondsPerMinute;
     var remainingSeconds =
         math.min(requestedSeconds, maximumAwaySeconds).toDouble();
     var elapsedSeconds = 0.0;
@@ -1035,7 +958,8 @@ class GameEngine {
       return false;
     }
 
-    final price = data.habs[nextTier].slotPrices[slotIndex];
+    final price =
+        data.habs[nextTier].slotPrices[slotIndex] * _habPriceMultiplier;
     return _spendCash(
       price,
       () => state.habs[ownedIndex] = HabOwnership(nextTier, slotIndex),
@@ -1115,6 +1039,13 @@ class GameEngine {
     );
   }
 
+  /// Soul Beacons multiply the earnings fed into the Soul Egg formula (wiki).
+  void _creditCash(double amount) {
+    state.cash += amount;
+    state.cashEarnedThisPrestige += amount * activeSoulBeaconMultiplier;
+    state.cashEarnedThisRun += amount;
+  }
+
   bool _spendCash(
     double price,
     void Function() purchase, {
@@ -1148,14 +1079,13 @@ class GameEngine {
   void _simulateOfflineStep(double elapsedSeconds) {
     final growthRate = _internalHatcheryGrowthPerSecond() *
         epicResearchMultiplier('ihrAwayMult');
-    final cashEarned = _cashEarnedDuring(
-      elapsedSeconds,
-      startingChickens: state.chickens,
-      growthPerSecond: growthRate,
-    );
-    state.cash += cashEarned;
-    state.cashEarnedThisPrestige += cashEarned;
-    state.cashEarnedThisRun += cashEarned;
+    final cashEarned = BalanceConfig.offlineEarningsFraction *
+        _cashEarnedDuring(
+          elapsedSeconds,
+          startingChickens: state.chickens,
+          growthPerSecond: growthRate,
+        );
+    _creditCash(cashEarned);
     state.chickens = _chickensAfterGrowth(elapsedSeconds, growthRate);
     _refillHatchery(elapsedSeconds);
     _awardChickenCountTrophies();

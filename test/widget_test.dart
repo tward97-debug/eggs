@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:egg_empire/config/balance.dart';
 import 'package:egg_empire/data/game_data.dart';
 import 'package:egg_empire/ui/game_screen.dart';
 
@@ -46,9 +45,6 @@ void main() {
     await pumpGame(tester);
 
     final habitatsButton = find.byKey(const ValueKey('open-habitats'));
-    await tester.drag(find.byType(ListView).first, const Offset(0, -400));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(habitatsButton);
     await tester.tap(habitatsButton);
     await tester.pumpAndSettle();
     expect(
@@ -67,7 +63,6 @@ void main() {
     await tester.pumpAndSettle();
 
     final transportButton = find.byKey(const ValueKey('open-transport'));
-    await tester.ensureVisible(transportButton);
     await tester.tap(transportButton);
     await tester.pumpAndSettle();
     expect(
@@ -82,22 +77,47 @@ void main() {
     expect(find.textContaining('eggs/min capacity'), findsWidgets);
   });
 
-  testWidgets('cash panel reserves room for the Drone button on narrow screens',
+  testWidgets('farm screen fits a narrow phone without overflowing',
       (tester) async {
-    tester.view.physicalSize = const Size(320, 800);
+    tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await pumpGame(tester);
 
-    final reservedText = tester.widget<Padding>(
-      find.byKey(const ValueKey('cash-panel-text-reserved-space')),
-    );
-    expect(
-      (reservedText.padding as EdgeInsets).right,
-      greaterThanOrEqualTo(BalanceConfig.droneButtonDiameter + 8),
-    );
     expect(find.byKey(const ValueKey('farm-cash-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('hatch-button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('holding the hatch button moves chickens onto the farm',
+      (tester) async {
+    await pumpGame(tester);
+    expect(find.textContaining('Chickens 0 / 250'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('hatch-button')));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('Chickens 0 / 250'), findsNothing);
+  });
+
+  testWidgets('silo menu opens and pages return to the farm', (tester) async {
+    await pumpGame(tester);
+    await tester.tap(find.byKey(const ValueKey('open-silos')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 2 silos'), findsOneWidget);
+    expect(find.byKey(const ValueKey('buy-silo')), findsOneWidget);
+    await tester.tap(find.byTooltip('Close Silos'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Boosts'));
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('hatch-button')).hitTestable(), findsNothing);
+    await tester.tap(find.byTooltip('Back to farm'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('hatch-button')).hitTestable(),
+        findsOneWidget);
   });
 
   testWidgets('drone appears, claims its reward, and disappears',
@@ -147,7 +167,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(
-      find.textContaining('Unlocks after 10 total research levels'),
+      find.textContaining('Unlocks after 30 total research levels'),
       findsWidgets,
     );
   });
@@ -157,8 +177,10 @@ void main() {
     await pumpGame(tester);
     expect(find.text('Haptic feedback'), findsNothing);
 
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Haptic feedback'), findsOneWidget);
     expect(find.text('Vibrate when chickens hatch.'), findsOneWidget);
     final hapticsSwitch = find.byKey(const ValueKey('haptics-setting'));
