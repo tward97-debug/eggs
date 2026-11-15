@@ -130,7 +130,33 @@ class BalanceConfig {
   static const double droneSpawnJitterFraction = 0.30;
 
   /// PLACEHOLDER: how long the drone is visible and tappable.
-  static const double droneFlightDurationSec = 0.5;
+  static const double droneFlightDurationSec = 0.6;
+  static const double droneButtonDiameter = 56;
+  static const double droneButtonLabelFontSize = 11;
+  static const double droneCashTextRightPadding =
+      droneButtonDiameter + 8;
+  static const double managementSheetHeightFraction = 0.95;
+  static const double managementMenuContentPadding = 16;
+  static const double managementMenuItemSpacing = 8;
+  static const double managementButtonMinimumHeight = 48;
+  static const double researchCardPadding = 16;
+  static const double researchRowSpacing = 8;
+  static const double researchMinimumTextSize = 14;
+  static const double researchButtonMinimumHeight = 48;
+  static const double researchFilterSpacing = 8;
+  static const List<String> researchCategories = [
+    'All',
+    'Laying',
+    'Egg value',
+    'Housing',
+    'Transport',
+    'Hatchery',
+    'Running chickens',
+    'Economy',
+    'Prestige',
+    'Drone rewards',
+    'Affordable',
+  ];
 
   /// PLACEHOLDER: regular drone reward odds.
   static const double droneGoldenEggChance = 0.30;
@@ -212,6 +238,10 @@ class BalanceConfig {
     'tachyon': 1,
     'enlightenment': 10,
   };
+
+  /// PLACEHOLDER: later eggs grant one Prophecy Egg for their top trophy.
+  static double prophecyEggTrophyReward(String eggId) =>
+      trophyProphecyEggRewards[eggId] ?? 1;
 
   /// Enlightenment trophy Prophecy Egg rewards by tier (wiki data).
   static const List<double> enlightenmentTrophyProphecyEggRewards = [

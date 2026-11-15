@@ -548,17 +548,24 @@ void main() {
       expect(engine.earningsBonus, 10);
       expect(engine.earningsMultiplier, 11);
 
+      final baseEb = engine.earningsBonus;
       engine.state.prophecyEggs = 2;
       expect(
         engine.earningsBonus,
         closeTo(10 * math.pow(1.05, 2), 1e-9),
       );
+      expect(engine.earningsBonus / baseEb, closeTo(math.pow(1.05, 2), 1e-9));
 
+      final ebBeforeProphecyBonus = engine.earningsBonus;
       engine.state.epicResearchLevels['prophecy_bonus'] = 5;
       expect(engine.prophecyEggMultiplier, 1.10);
       expect(
         engine.earningsBonus,
         closeTo(10 * math.pow(1.10, 2), 1e-9),
+      );
+      expect(
+        engine.earningsBonus / ebBeforeProphecyBonus,
+        closeTo(math.pow(1.10 / 1.05, 2), 1e-9),
       );
     });
 
@@ -651,6 +658,56 @@ void main() {
       expect(engine.state.trophies, hasLength(5));
       expect(engine.state.soulEggs, 10.112e9);
       expect(engine.state.prophecyEggs, 5);
+    });
+
+    test('top trophy awards the configured Prophecy Egg reward per egg', () {
+      final engine = GameEngine(data: data);
+      engine.state.habs
+        ..clear()
+        ..addAll([
+          const HabOwnership(18, 0),
+          const HabOwnership(18, 1),
+          const HabOwnership(18, 2),
+          const HabOwnership(18, 3),
+        ]);
+      for (final item in data.commonResearch) {
+        if (item.effect.contains('habCapacity') ||
+            item.effect.contains('portalHabCapacity')) {
+          engine.state.commonResearchLevels[item.id] = item.maxLevel;
+        }
+      }
+
+      for (var index = 0; index < data.eggs.length; index++) {
+        engine.state.eggIndex = index;
+        engine.state.chickens = engine.trophyChickenCountThreshold(
+          BalanceConfig.trophyTierNames.length - 1,
+        );
+        final prophecyEggsBefore = engine.state.prophecyEggs;
+
+        engine.tick(1);
+
+        expect(
+          engine.state.prophecyEggs - prophecyEggsBefore,
+          BalanceConfig.prophecyEggTrophyReward(data.eggs[index].id),
+          reason: data.eggs[index].name,
+        );
+        expect(
+          engine.state.trophies,
+          contains(
+            '${data.eggs[index].id}:trophy:'
+            '${BalanceConfig.trophyTierNames.length - 1}',
+          ),
+        );
+      }
+
+      expect(BalanceConfig.prophecyEggTrophyReward('edible'), 5);
+      expect(BalanceConfig.prophecyEggTrophyReward('superfood'), 4);
+      expect(BalanceConfig.prophecyEggTrophyReward('medical'), 3);
+      expect(BalanceConfig.prophecyEggTrophyReward('rocket_fuel'), 2);
+      expect(
+        BalanceConfig.prophecyEggTrophyReward(data.eggs.last.id),
+        1,
+      );
     });
 
     test('uses the five fixed wiki chicken-count thresholds', () {

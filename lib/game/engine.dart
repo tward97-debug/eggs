@@ -410,14 +410,17 @@ class GameEngine {
       }
       final soulEggRewards = BalanceConfig.trophySoulEggRewards[eggId];
       final goldenEggRewards = BalanceConfig.trophyGoldenEggRewards[eggId];
-      final prophecyReward = BalanceConfig.trophyProphecyEggRewards[eggId];
+      final prophecyReward = eggId == 'enlightenment'
+          ? null
+          : BalanceConfig.prophecyEggTrophyReward(eggId);
       final enlightenmentRewards = eggId == 'enlightenment'
           ? BalanceConfig.enlightenmentTrophyProphecyEggRewards
           : null;
       final hasReward = (soulEggRewards != null &&
               index < soulEggRewards.length) ||
           (goldenEggRewards != null && index < goldenEggRewards.length) ||
-          prophecyReward != null && index == 4 ||
+          prophecyReward != null &&
+              index == BalanceConfig.trophyTierNames.length - 1 ||
           enlightenmentRewards != null && index < enlightenmentRewards.length;
       if (!hasReward) {
         continue;
@@ -429,7 +432,8 @@ class GameEngine {
       if (goldenEggRewards != null && index < goldenEggRewards.length) {
         state.goldenEggs += goldenEggRewards[index];
       }
-      if (prophecyReward != null && index == 4) {
+      if (prophecyReward != null &&
+          index == BalanceConfig.trophyTierNames.length - 1) {
         state.prophecyEggs += prophecyReward;
       }
       if (enlightenmentRewards != null && index < enlightenmentRewards.length) {

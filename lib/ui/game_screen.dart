@@ -10,12 +10,18 @@ import '../config/balance.dart';
 import '../data/game_data.dart';
 import '../game/engine.dart';
 import '../game/format_number.dart' as number_format;
+import 'research_effect_description.dart';
 import 'game_session.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.data});
+  const GameScreen({
+    super.key,
+    this.data,
+    @visibleForTesting this.simulateDroneClockForTesting = false,
+  });
 
   final GameData? data;
+  final bool simulateDroneClockForTesting;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -28,7 +34,10 @@ class _GameScreenState extends State<GameScreen> {
   Widget build(BuildContext context) {
     final suppliedData = widget.data;
     if (suppliedData != null) {
-      return _LoadedGameScreen(data: suppliedData);
+      return _LoadedGameScreen(
+        data: suppliedData,
+        simulateDroneClockForTesting: widget.simulateDroneClockForTesting,
+      );
     }
     return FutureBuilder<GameData>(
       future: _gameData,
@@ -50,7 +59,10 @@ class _GameScreenState extends State<GameScreen> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return _LoadedGameScreen(data: data);
+        return _LoadedGameScreen(
+          data: data,
+          simulateDroneClockForTesting: widget.simulateDroneClockForTesting,
+        );
       },
     );
   }
@@ -139,9 +151,13 @@ class _DroneRewardEffectState extends State<_DroneRewardEffect>
 }
 
 class _LoadedGameScreen extends StatefulWidget {
-  const _LoadedGameScreen({required this.data});
+  const _LoadedGameScreen({
+    required this.data,
+    required this.simulateDroneClockForTesting,
+  });
 
   final GameData data;
+  final bool simulateDroneClockForTesting;
 
   @override
   State<_LoadedGameScreen> createState() => _LoadedGameScreenState();
@@ -173,7 +189,11 @@ class _LoadedGameScreenState extends State<_LoadedGameScreen> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return _RunningGameScreen(data: widget.data, session: session);
+        return _RunningGameScreen(
+          data: widget.data,
+          session: session,
+          simulateDroneClockForTesting: widget.simulateDroneClockForTesting,
+        );
       },
     );
   }
@@ -183,10 +203,12 @@ class _RunningGameScreen extends StatefulWidget {
   const _RunningGameScreen({
     required this.data,
     required this.session,
+    required this.simulateDroneClockForTesting,
   });
 
   final GameData data;
   final GameSession session;
+  final bool simulateDroneClockForTesting;
 
   @override
   State<_RunningGameScreen> createState() => _RunningGameScreenState();
@@ -207,11 +229,15 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   int _selectedPage = 0;
   bool _scientificNumberFormat = false;
   bool _showOfflineSummary = BalanceConfig.showOfflineSummaryDefault;
+  String _researchFilter = 'All';
   int _droneRewardEffectSequence = 0;
   String? _droneRewardMessage;
   bool _droneRewardIsGoldenEgg = false;
+  bool _droneTestSpawnScheduled = false;
   final math.Random _droneRandom = math.Random();
-  double _droneSecondsUntilSpawn = BalanceConfig.droneSpawnIntervalSec;
+  late double _droneSecondsUntilSpawn = widget.simulateDroneClockForTesting
+      ? 0
+      : BalanceConfig.droneSpawnIntervalSec;
   double _droneFlightDuration = 0;
   double _droneFlightElapsed = 0;
 
@@ -250,8 +276,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       _lifecycleWork
           .then((_) => _session.close())
           .catchError((Object error, StackTrace stackTrace) {
-            _showPersistenceError(error);
-          }),
+        _showPersistenceError(error);
+      }),
     );
     super.dispose();
   }
@@ -414,7 +440,10 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
 
   void _advanceGame(Timer timer) {
     final elapsedMilliseconds = _stopwatch.elapsedMilliseconds;
-    final deltaMilliseconds = elapsedMilliseconds - _lastElapsedMilliseconds;
+    var deltaMilliseconds = elapsedMilliseconds - _lastElapsedMilliseconds;
+    if (widget.simulateDroneClockForTesting) {
+      deltaMilliseconds = BalanceConfig.gameUiRefreshMilliseconds;
+    }
     _lastElapsedMilliseconds = elapsedMilliseconds;
     if (deltaMilliseconds > 0 && mounted) {
       final elapsedSeconds =
@@ -450,6 +479,11 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   }
 
   void _scheduleNextDrone() {
+    if (widget.simulateDroneClockForTesting) {
+      _droneSecondsUntilSpawn = _droneTestSpawnScheduled ? double.infinity : 0;
+      _droneTestSpawnScheduled = true;
+      return;
+    }
     final jitter = (2 * _droneRandom.nextDouble() - 1) *
         BalanceConfig.droneSpawnJitterFraction;
     _droneSecondsUntilSpawn =
@@ -512,7 +546,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   Widget _buildScaffold(GameSession session) {
     final pages = [
       _buildFarmPage(),
-      _buildTransportPage(),
       _buildResearchPage(),
       _buildPrestigePage(),
       _buildTrophiesPage(),
@@ -569,11 +602,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
             label: 'Farm',
           ),
           NavigationDestination(
-            icon: Icon(Icons.local_shipping_outlined),
-            selectedIcon: Icon(Icons.local_shipping),
-            label: 'Transport',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.science_outlined),
             selectedIcon: Icon(Icons.science),
             label: 'Research',
@@ -608,69 +636,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Farm cash', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(
-                  formatNumber(_engine.state.cash),
-                  style: theme.textTheme.headlineMedium,
-                ),
-                Text('${formatNumber(_engine.cashPerSecond)}/sec'),
-                Text(
-                  'Running chicken bonus ×'
-                  '${formatNumber(_engine.runningChickenMultiplier)} · '
-                  '${formatNumber(_engine.runningChickenCount)} runners',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                if (_engine.nextEggUpgradeFarmValue case final threshold?)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Farm value: ${formatNumber(_engine.farmValue)} / '
-                        '${formatNumber(threshold)}',
-                      ),
-                      const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value: (_engine.farmValue / threshold)
-                            .clamp(
-                              BalanceConfig.hatcheryProgressMinimum,
-                              BalanceConfig.hatcheryProgressMaximum,
-                            )
-                            .toDouble(),
-                        semanticsLabel: 'Farm value progress',
-                      ),
-                    ],
-                  )
-                else
-                  Text('Farm value: ${formatNumber(_engine.farmValue)}'),
-                if (_engine.canAscend)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: _confirmAscend,
-                      icon: const Icon(Icons.arrow_upward),
-                      label: Text(
-                        'Ascend to egg tier ${_engine.eggIndex + 2}',
-                      ),
-                    ),
-                  ),
-                const Divider(height: 28),
-                Text(
-                  'Egg tier ${_engine.eggIndex + 1} · '
-                  '${formatNumber(_engine.currentEgg.valuePerEgg)} per egg',
-                ),
-              ],
-            ),
-          ),
-        ),
-        _buildDroneCard(),
+        _buildFarmCashPanel(theme),
         if (_engine.eggsBackingUp)
           Card(
             color: theme.colorScheme.errorContainer,
@@ -739,12 +705,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Haptic feedback'),
-                  value: _engine.state.hapticsEnabled,
-                  onChanged: _session.setHapticsEnabled,
-                ),
                 Text(
                   'Internal hatcheries: '
                   '${formatNumber(_engine.flatResearchBonus('ihrPerHab'))} '
@@ -752,26 +712,147 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   style: theme.textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('open-habitats'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size.fromHeight(
+                            BalanceConfig.managementButtonMinimumHeight,
+                          ),
+                        ),
+                        onPressed: _showHabitatsMenu,
+                        icon: const Icon(Icons.home_work_outlined),
+                        label: const Text('Habitats'),
+                      ),
+                    ),
+                    const SizedBox(
+                      width: BalanceConfig.managementMenuItemSpacing,
+                    ),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('open-transport'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size.fromHeight(
+                            BalanceConfig.managementButtonMinimumHeight,
+                          ),
+                        ),
+                        onPressed: _showTransportMenu,
+                        icon: const Icon(Icons.local_shipping_outlined),
+                        label: const Text('Transport'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Text('Habitats', style: theme.textTheme.titleLarge),
-        const SizedBox(height: 8),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          childAspectRatio: 1.15,
-          children: List<Widget>.generate(
-            BalanceConfig.maximumHabCount,
-            _buildHabSlot,
-          ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildFarmCashPanel(ThemeData theme) {
+    return Card(
+      key: const ValueKey('farm-cash-panel'),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Stack(
+          children: [
+            Padding(
+              key: const ValueKey('cash-panel-text-reserved-space'),
+              padding: const EdgeInsets.only(
+                right: BalanceConfig.droneCashTextRightPadding,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Farm cash', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    formatNumber(_engine.state.cash),
+                    style: theme.textTheme.headlineMedium,
+                  ),
+                  Text('${formatNumber(_engine.cashPerSecond)}/sec'),
+                  Text(
+                    'Running chicken bonus ×'
+                    '${formatNumber(_engine.runningChickenMultiplier)} · '
+                    '${formatNumber(_engine.runningChickenCount)} runners',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_engine.nextEggUpgradeFarmValue case final threshold?)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Farm value: ${formatNumber(_engine.farmValue)} / '
+                          '${formatNumber(threshold)}',
+                        ),
+                        const SizedBox(height: 4),
+                        LinearProgressIndicator(
+                          value: (_engine.farmValue / threshold)
+                              .clamp(
+                                BalanceConfig.hatcheryProgressMinimum,
+                                BalanceConfig.hatcheryProgressMaximum,
+                              )
+                              .toDouble(),
+                          semanticsLabel: 'Farm value progress',
+                        ),
+                      ],
+                    )
+                  else
+                    Text('Farm value: ${formatNumber(_engine.farmValue)}'),
+                  if (_engine.canAscend)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: _confirmAscend,
+                        icon: const Icon(Icons.arrow_upward),
+                        label: Text(
+                          'Ascend to egg tier ${_engine.eggIndex + 2}',
+                        ),
+                      ),
+                    ),
+                  const Divider(height: 28),
+                  Text(
+                    'Egg tier ${_engine.eggIndex + 1} · '
+                    '${formatNumber(_engine.currentEgg.valuePerEgg)} per egg',
+                  ),
+                ],
+              ),
+            ),
+            if (_hasActiveDrone)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: SizedBox(
+                  width: BalanceConfig.droneButtonDiameter,
+                  height: BalanceConfig.droneButtonDiameter,
+                  child: FilledButton(
+                    key: const ValueKey('drone-button'),
+                    style: FilledButton.styleFrom(
+                      shape: const CircleBorder(),
+                      padding: EdgeInsets.zero,
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _collectDrone,
+                    child: const Text(
+                      'Drone',
+                      style: TextStyle(
+                        fontSize: BalanceConfig.droneButtonLabelFontSize,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -807,181 +888,237 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     }
   }
 
-  Widget _buildHabSlot(int slotIndex) {
-    final hab = _engine.state.habs
-        .where((item) => item.slotIndex == slotIndex)
-        .firstOrNull;
-    final theme = Theme.of(context);
-    final price = _engine.habPrice(0, slotIndex: slotIndex);
-    final canAfford = _engine.state.cash >= price;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openHabitatSlot(slotIndex),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                hab == null ? Icons.add_home_work_outlined : Icons.home_work,
-                size: 30,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Habitat ${slotIndex + 1}',
-                style: theme.textTheme.titleSmall,
-                textAlign: TextAlign.center,
-              ),
-              if (hab == null) ...[
-                const Text('Empty'),
-                Text(
-                  price.isFinite
-                      ? 'Build · ${formatNumber(price)}'
-                      : 'Unavailable',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: canAfford ? null : theme.colorScheme.error,
-                  ),
-                ),
-              ] else ...[
-                Text(
-                  'Tier ${hab.tierIndex + 1}',
-                  textAlign: TextAlign.center,
-                ),
-                Text(
-                  '${formatNumber(_engine.capacityForHab(hab.tierIndex))} '
-                  'capacity',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                ),
-                if (hab.tierIndex + 1 < widget.data.habs.length)
-                  Text('Tap to upgrade', style: theme.textTheme.bodySmall)
-                else
-                  Text('Max tier', style: theme.textTheme.bodySmall),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Future<void> _showHabitatsMenu() => _showManagementMenu(
+        title: 'Habitats',
+        icon: Icons.home_work_outlined,
+        children: (setSheetState) => [
+          for (var tier = 0; tier < widget.data.habs.length; tier++)
+            _buildHabitatTierRow(tier, setSheetState: setSheetState),
+        ],
+      );
 
-  Future<void> _openHabitatSlot(int slotIndex) async {
-    final hab = _engine.state.habs
-        .where((item) => item.slotIndex == slotIndex)
-        .firstOrNull;
-    if (hab == null) {
-      final price = _engine.habPrice(0, slotIndex: slotIndex);
-      if (_engine.state.cash >= price && price.isFinite) {
-        _mutate(
-          () => _engine.buyHab(0, slotIndex: slotIndex),
-        );
-      }
-      return;
-    }
-
-    final targetTier = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Habitat ${slotIndex + 1} · Tier ${hab.tierIndex + 1}'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var tier = hab.tierIndex + 1;
-                    tier < widget.data.habs.length;
-                    tier++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton(
-                      onPressed: _engine.state.cash >=
-                              widget.data.habs[tier].slotPrices[slotIndex]
-                          ? () => Navigator.of(context).pop(tier)
-                          : null,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Upgrade to Tier ${tier + 1} · '
-                            '${widget.data.habs[tier].name}',
-                          ),
-                          Text(
-                            'Capacity: '
-                            '${formatNumber(_engine.capacityForHab(tier))} '
-                            'chickens · '
-                            '${formatNumber(widget.data.habs[tier].slotPrices[slotIndex])}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+  Future<void> _showTransportMenu() => _showManagementMenu(
+        title: 'Transport',
+        icon: Icons.local_shipping_outlined,
+        children: (setSheetState) => [
+          Card(
+            child: ListTile(
+              title: const Text('Shipping capacity'),
+              subtitle: Text(
+                '${formatNumber(_engine.shipCapacityPerMinute)} eggs/min · '
+                '${_engine.state.vehicles.length}/'
+                '${formatNumber(_engine.maximumFleetSize)} slots used',
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
+          for (var tier = 0; tier < widget.data.vehicles.length; tier++)
+            _buildVehicleTierRow(tier, setSheetState: setSheetState),
         ],
-      ),
-    );
-    if (targetTier != null && mounted) {
-      _mutate(
-        () => _engine.upgradeHab(
-          hab.tierIndex,
-          slotIndex,
-          targetTierIndex: targetTier,
-        ),
       );
-    }
-  }
 
-  Widget _buildTransportPage() {
-    return Column(
-      children: [
-        _buildCashBalanceHeader(),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+  Future<void> _showManagementMenu({
+    required String title,
+    required IconData icon,
+    required List<Widget> Function(StateSetter) children,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => FractionallySizedBox(
+          heightFactor: BalanceConfig.managementSheetHeightFraction,
+          child: Column(
             children: [
-              Card(
-                child: ListTile(
-                  title: const Text('Shipping capacity'),
-                  subtitle: Text(
-                    '${formatNumber(_engine.shipCapacityPerMinute)} eggs/min'
-                    ' · ${_engine.state.vehicles.length}/'
-                    '${formatNumber(_engine.maximumFleetSize)} slots',
-                  ),
-                  leading: const Icon(Icons.local_shipping),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BalanceConfig.managementMenuContentPadding,
+                  vertical: BalanceConfig.managementMenuItemSpacing,
+                ),
+                child: Row(
+                  children: [
+                    Icon(icon),
+                    const SizedBox(
+                      width: BalanceConfig.managementMenuItemSpacing,
+                    ),
+                    Expanded(
+                      child: Text(
+                        title,
+                        key: const ValueKey('management-menu-title'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close $title',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text('Vehicles', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1.15,
-                children: List<Widget>.generate(
-                  _engine.maximumFleetSize.floor(),
-                  _buildVehicleSlot,
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BalanceConfig.managementMenuContentPadding,
+                ),
+                child: Text(
+                  'Farm cash: ${formatNumber(_engine.state.cash)} · '
+                  '${formatNumber(_engine.cashPerSecond)}/sec',
+                  key: const ValueKey('management-cash-header'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(
+                    BalanceConfig.managementMenuContentPadding,
+                  ),
+                  children: children(setSheetState),
                 ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  double _nextHabitatTierPrice(int tier) {
+    if (tier == 0) {
+      final availableSlots = List<int>.generate(
+        BalanceConfig.maximumHabCount,
+        (index) => index,
+      ).where(
+        (slotIndex) =>
+            !_engine.state.habs.any((hab) => hab.slotIndex == slotIndex),
+      );
+      final prices = availableSlots
+          .map((slotIndex) => _engine.habPrice(0, slotIndex: slotIndex))
+          .toList();
+      return prices.isEmpty ? double.infinity : prices.reduce(math.min);
+    }
+
+    final prices = _engine.state.habs
+        .where((hab) => hab.tierIndex < tier)
+        .map((hab) => widget.data.habs[tier].slotPrices[hab.slotIndex])
+        .toList();
+    return prices.isEmpty ? double.infinity : prices.reduce(math.min);
+  }
+
+  Widget _buildHabitatTierRow(
+    int tier, {
+    required StateSetter? setSheetState,
+  }) {
+    final habitat = widget.data.habs[tier];
+    final owned =
+        _engine.state.habs.where((hab) => hab.tierIndex == tier).length;
+    final price = _nextHabitatTierPrice(tier);
+    final canBuy = price.isFinite && _engine.state.cash >= price;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(
+          BalanceConfig.managementMenuContentPadding,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(habitat.name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+            Text('$owned / ${BalanceConfig.maximumHabCount} owned'),
+            Text(
+              '${formatNumber(_engine.capacityForHab(tier))} chickens capacity',
+            ),
+            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Next: ${price.isFinite ? '${formatNumber(price)} cash' : 'Unavailable'}',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: BalanceConfig.researchMinimumTextSize,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  key: ValueKey('buy-habitat-tier-$tier'),
+                  onPressed: canBuy
+                      ? () => _buyHabitatTier(
+                            tier,
+                            setSheetState: setSheetState,
+                          )
+                      : null,
+                  child: const Text('Buy'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleTierRow(
+    int tier, {
+    required StateSetter? setSheetState,
+  }) {
+    final vehicle = widget.data.vehicles[tier];
+    final owned =
+        _engine.state.vehicles.where((item) => item.tierIndex == tier).length;
+    final price = _engine.vehicleUpgradePrice(tier);
+    final freeTierAlreadyOwned = vehicle.firstPrice == 0 && owned > 0;
+    final hasSlot = _engine.state.vehicles.length < _engine.maximumFleetSize;
+    final canBuy =
+        hasSlot && !freeTierAlreadyOwned && _engine.state.cash >= price;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(
+          BalanceConfig.managementMenuContentPadding,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(vehicle.name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+            Text(
+              '$owned / ${formatNumber(_engine.maximumFleetSize)} owned',
+            ),
+            Text(
+              '${formatNumber(_engine.capacityForVehicle(tier))} eggs/min capacity',
+            ),
+            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Next: ${formatNumber(price)} cash',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: BalanceConfig.researchMinimumTextSize,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  key: ValueKey('buy-vehicle-tier-$tier'),
+                  onPressed: canBuy
+                      ? () => _buyVehicleTier(
+                            tier,
+                            setSheetState: setSheetState,
+                          )
+                      : null,
+                  child: const Text('Buy'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _buyVehicleTier(int tier, {required StateSetter? setSheetState}) {
+    _mutate(() => _engine.buyVehicle(tier));
+    setSheetState?.call(() {});
   }
 
   Widget _buildCashBalanceHeader() {
@@ -992,6 +1129,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         child: ListTile(
           leading: const Icon(Icons.payments_outlined),
           title: const Text('Farm cash'),
+          subtitle: Text('${formatNumber(_engine.cashPerSecond)}/sec'),
           trailing: Text(
             formatNumber(_engine.state.cash),
             style: Theme.of(context).textTheme.titleMedium,
@@ -1001,146 +1139,80 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     );
   }
 
-  Widget _buildVehicleSlot(int slotIndex) {
-    final vehicle = _engine.state.vehicles
-        .where((item) => item.slotIndex == slotIndex)
-        .firstOrNull;
-    final isUnlocked = slotIndex < _engine.maximumFleetSize;
-    final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      color: isUnlocked ? null : theme.colorScheme.surfaceContainerLow,
-      child: InkWell(
-        onTap: isUnlocked ? () => _openVehicleSlot(slotIndex) : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                vehicle == null
-                    ? Icons.add_road_outlined
-                    : Icons.local_shipping,
-                size: 30,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Vehicle ${slotIndex + 1}',
-                style: theme.textTheme.titleSmall,
-              ),
-              if (!isUnlocked)
-                Text(
-                  'Locked · fleet research',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                )
-              else if (vehicle == null)
-                Text(
-                  'Empty · tap to buy',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                )
-              else ...[
-                Text(
-                  widget.data.vehicles[vehicle.tierIndex].name,
-                  textAlign: TextAlign.center,
-                ),
-                Text(
-                  '${formatNumber(_engine.capacityForVehicle(vehicle.tierIndex))} '
-                  'eggs/min',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                ),
-                Text(
-                  vehicle.tierIndex + 1 < widget.data.vehicles.length
-                      ? 'Tap to upgrade'
-                      : 'Max tier',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openVehicleSlot(int slotIndex) async {
-    final vehicle = _engine.state.vehicles
-        .where((item) => item.slotIndex == slotIndex)
-        .firstOrNull;
-    final firstTier = vehicle?.tierIndex ?? -1;
-    final choices = <Widget>[];
-    for (var tier = firstTier + 1; tier < widget.data.vehicles.length; tier++) {
-      final item = widget.data.vehicles[tier];
-      final price = _engine.vehicleUpgradePrice(tier);
-      final freeTierAlreadyOwned = item.firstPrice == 0 &&
-          _engine.state.vehicles.any((owned) => owned.tierIndex == tier);
-      choices.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: OutlinedButton(
-            onPressed: _engine.state.cash >= price && !freeTierAlreadyOwned
-                ? () => Navigator.of(context).pop(tier)
-                : null,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  vehicle == null
-                      ? 'Buy ${item.name}'
-                      : 'Upgrade to ${item.name}',
-                ),
-                Text(
-                  '${formatNumber(_engine.capacityForVehicle(tier))} eggs/min · '
-                  '${price == 0 && !freeTierAlreadyOwned ? 'Free' : '${formatNumber(price)} cash'}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ),
+  Future<void> _buyHabitatTier(
+    int tier, {
+    required StateSetter? setSheetState,
+  }) async {
+    if (tier == 0) {
+      final slotIndex = List<int>.generate(
+        BalanceConfig.maximumHabCount,
+        (index) => index,
+      ).firstWhere(
+        (slotIndex) =>
+            !_engine.state.habs.any((hab) => hab.slotIndex == slotIndex),
+        orElse: () => -1,
       );
+      if (slotIndex >= 0) {
+        _mutate(() => _engine.buyHab(0, slotIndex: slotIndex));
+        setSheetState?.call(() {});
+      }
+      return;
     }
 
-    final targetTier = await showDialog<int>(
+    final eligibleHabs =
+        _engine.state.habs.where((hab) => hab.tierIndex < tier).toList();
+    final slotIndex = await showDialog<int>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Vehicle ${slotIndex + 1}'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Upgrade to ${widget.data.habs[tier].name}'),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: choices.isEmpty
-                  ? [const Text('This vehicle is already at the highest tier.')]
-                  : choices,
+              children: [
+                for (final hab in eligibleHabs)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: BalanceConfig.managementMenuItemSpacing,
+                    ),
+                    child: OutlinedButton(
+                      onPressed: _engine.state.cash >=
+                              widget.data.habs[tier].slotPrices[hab.slotIndex]
+                          ? () => Navigator.of(dialogContext).pop(hab.slotIndex)
+                          : null,
+                      child: Text(
+                        'Habitat ${hab.slotIndex + 1} · '
+                        'Tier ${hab.tierIndex + 1} · '
+                        '${formatNumber(widget.data.habs[tier].slotPrices[hab.slotIndex])} cash',
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
         ],
       ),
     );
-    if (targetTier == null || !mounted) {
-      return;
-    }
-    if (vehicle == null) {
-      _mutate(
-        () => _engine.buyVehicle(targetTier, slotIndex: slotIndex),
+    if (slotIndex != null && mounted) {
+      final hab = _engine.state.habs.firstWhere(
+        (item) => item.slotIndex == slotIndex,
       );
-    } else {
       _mutate(
-        () => _engine.upgradeVehicle(
+        () => _engine.upgradeHab(
+          hab.tierIndex,
           slotIndex,
-          targetTierIndex: targetTier,
+          targetTierIndex: tier,
         ),
       );
+      setSheetState?.call(() {});
     }
   }
 
@@ -1155,6 +1227,26 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final category in BalanceConfig.researchCategories)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          right: BalanceConfig.researchFilterSpacing,
+                        ),
+                        child: ChoiceChip(
+                          label: Text(category),
+                          selected: _researchFilter == category,
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onSelected: (_) =>
+                              setState(() => _researchFilter = category),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.auto_awesome),
@@ -1169,29 +1261,44 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                 child: ListTile(
                   leading: const Icon(Icons.science),
                   title: const Text('Common research'),
-                  subtitle: Text(
-                    'Invest farm cash to improve production, housing, and transport.',
-                  ),
+                  subtitle: const Text('Research upgrades grouped by tier.'),
                 ),
               ),
               for (final tier in tiers)
                 _buildResearchTier(
                   tier,
-                  items.where((item) => item.tier == tier).toList(
-                        growable: false,
-                      ),
+                  items.where((item) {
+                    if (item.tier != tier ||
+                        !researchMatchesCategory(item, _researchFilter)) {
+                      return false;
+                    }
+                    return _researchFilter != 'Affordable' ||
+                        (_engine.isCommonResearchTierUnlocked(tier) &&
+                            (_engine.state.commonResearchLevels[item.id] ?? 0) <
+                                item.maxLevel &&
+                            _engine.state.cash >=
+                                _engine.commonResearchCost(item.id));
+                  }).toList(growable: false),
                 ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.auto_awesome),
                   title: const Text('Epic research'),
                   subtitle: Text(
-                    'Permanent upgrades · '
-                    '${formatNumber(_engine.state.goldenEggs)} Golden Eggs',
+                    'Golden Eggs · '
+                    '${formatNumber(_engine.state.goldenEggs)} available',
                   ),
                 ),
               ),
-              for (final item in widget.data.epicResearch)
+              for (final item in widget.data.epicResearch.where((item) {
+                if (!researchMatchesCategory(item, _researchFilter)) {
+                  return false;
+                }
+                return _researchFilter != 'Affordable' ||
+                    (_engine.epicResearchLevel(item.id) < item.maxLevel &&
+                        _engine.state.goldenEggs >=
+                            _engine.epicResearchCost(item.id));
+              }))
                 _buildEpicResearchItem(item),
             ],
           ),
@@ -1204,24 +1311,160 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     final level = _engine.epicResearchLevel(item.id);
     final cost = _engine.epicResearchCost(item.id);
     final maxed = level >= item.maxLevel;
-    final canBuy = !maxed && _engine.state.goldenEggs >= cost;
-    return Card(
-      child: ListTile(
-        title: Text(item.name),
-        subtitle: Text(
-          '${_effectLabel(item.effect)} · '
-          '+${formatNumber(item.perLevel)} per level · '
-          'level $level/${item.maxLevel}',
-        ),
-        trailing: TextButton(
-          onPressed: canBuy
-              ? () => _mutate(() => _engine.buyEpicResearch(item.id))
-              : null,
-          child: Text(maxed ? 'MAX' : '${formatNumber(cost)} GE'),
+    return _buildResearchCard(
+      item: item,
+      level: level,
+      cost: cost,
+      currency: 'GE',
+      maxed: maxed,
+      affordable: !maxed && _engine.state.goldenEggs >= cost,
+      onBuy: () => _mutate(() => _engine.buyEpicResearch(item.id)),
+    );
+  }
+
+  Widget _buildResearchCard({
+    required ResearchData item,
+    required int level,
+    required double cost,
+    required String currency,
+    required bool maxed,
+    required bool affordable,
+    required VoidCallback onBuy,
+    String? lockedRequirement,
+  }) {
+    final description = describeEffect(
+      item,
+      level,
+      formatNumber: formatNumber,
+    );
+    final locked = lockedRequirement != null;
+    final dimmed = locked || (!maxed && !affordable);
+    final colors = Theme.of(context).colorScheme;
+    return Opacity(
+      opacity: dimmed ? 0.68 : 1,
+      child: Card(
+        key: ValueKey('research-item-${item.id}'),
+        color: maxed ? colors.surfaceContainerLow : null,
+        child: Padding(
+          padding: const EdgeInsets.all(BalanceConfig.researchCardPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      right: BalanceConfig.researchRowSpacing,
+                    ),
+                    child: Icon(
+                      _researchCategoryIcon(description.category),
+                      size: 20,
+                      semanticLabel: description.category,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+                  Text(
+                    '$level / ${item.maxLevel}',
+                    key: ValueKey('research-level-${item.id}'),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: BalanceConfig.researchMinimumTextSize,
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: BalanceConfig.researchCardPadding,
+                  top: BalanceConfig.researchRowSpacing,
+                ),
+                child: Text(
+                  description.category,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              const SizedBox(height: BalanceConfig.researchRowSpacing),
+              _researchBodyText('Per level: ${description.perLevel}'),
+              _researchBodyText(description.currentTotal),
+              if (description.nextTotal case final next?)
+                _researchBodyText(next),
+              if (lockedRequirement case final requirement?)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    top: BalanceConfig.researchRowSpacing,
+                  ),
+                  child: _researchBodyText(requirement),
+                ),
+              const SizedBox(height: BalanceConfig.researchRowSpacing),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      maxed
+                          ? 'MAX'
+                          : 'Next cost: ${formatNumber(cost)} $currency',
+                      key: ValueKey('research-cost-${item.id}'),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: BalanceConfig.researchMinimumTextSize,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (maxed)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check, color: colors.outline),
+                        Text(
+                          'MAX',
+                          style: TextStyle(color: colors.outline),
+                        ),
+                      ],
+                    )
+                  else
+                    SizedBox(
+                      height: BalanceConfig.researchButtonMinimumHeight,
+                      child: FilledButton(
+                        onPressed: affordable && !locked ? onBuy : null,
+                        child: const Text('Buy'),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _researchBodyText(String text) => Text(
+        text,
+        style: const TextStyle(
+          fontSize: BalanceConfig.researchMinimumTextSize,
+        ),
+      );
+
+  IconData _researchCategoryIcon(String category) => switch (category) {
+        'Laying' => Icons.egg_alt_outlined,
+        'Egg value' => Icons.payments_outlined,
+        'Housing' => Icons.home_work_outlined,
+        'Transport' => Icons.local_shipping_outlined,
+        'Hatchery' => Icons.egg_alt_outlined,
+        'Running chickens' => Icons.directions_run,
+        'Prestige' => Icons.auto_awesome,
+        'Drone rewards' => Icons.flight,
+        _ => Icons.tune,
+      };
 
   Widget _buildPrestigePage() {
     return ListView(
@@ -1348,6 +1591,13 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                 value: _showOfflineSummary,
                 onChanged: _setOfflineSummary,
               ),
+              SwitchListTile(
+                key: const ValueKey('haptics-setting'),
+                title: const Text('Haptic feedback'),
+                subtitle: const Text('Vibrate when chickens hatch.'),
+                value: _engine.state.hapticsEnabled,
+                onChanged: _session.setHapticsEnabled,
+              ),
             ],
           ),
         ),
@@ -1413,7 +1663,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
               remaining > 0
                   ? 'Active · ×${formatNumber(activeMultiplier)} · '
                       '${_formatBoostTime(remaining)} remaining'
-                  : '${_effectLabel(boost.effect)} · '
+                  : '${_boostEffectLabel(boost.effect)} · '
                       '${_formatBoostTime(boost.durationSeconds)} duration',
             ),
             const SizedBox(height: 12),
@@ -1437,45 +1687,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDroneCard() {
-    if (!_hasActiveDrone) {
-      return const SizedBox.shrink();
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: Material(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(8),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _collectDrone,
-                  child: const Center(
-                    child: Text(
-                      'TAP ANYWHERE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            LinearProgressIndicator(value: 1 - _droneFlightProgress),
           ],
         ),
       ),
@@ -1549,22 +1760,32 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     if (goldenEggRewards != null && trophyIndex < goldenEggRewards.length) {
       return '+${formatNumber(goldenEggRewards[trophyIndex])} Golden Eggs';
     }
-    if (trophyIndex == BalanceConfig.trophyTierNames.length - 1) {
-      final prophecyReward = BalanceConfig.trophyProphecyEggRewards[eggId];
-      if (prophecyReward != null) {
-        return '+${formatNumber(prophecyReward)} Prophecy Eggs';
-      }
-    }
     if (eggId == 'enlightenment' &&
         trophyIndex <
             BalanceConfig.enlightenmentTrophyProphecyEggRewards.length) {
       return '+${formatNumber(BalanceConfig.enlightenmentTrophyProphecyEggRewards[trophyIndex])} '
           'Prophecy Eggs';
     }
+    if (trophyIndex == BalanceConfig.trophyTierNames.length - 1) {
+      final prophecyReward =
+          BalanceConfig.prophecyEggTrophyReward(eggId);
+      return '+${formatNumber(prophecyReward)} Prophecy Eggs';
+    }
     return 'Reward not listed on source page';
   }
 
+  String _boostEffectLabel(String effect) => switch (effect) {
+        'earnings' => 'earnings',
+        'internalHatchery' => 'internal hatchery rate',
+        'boostBeacon' => 'boost effectiveness',
+        'soulEggGain' => 'Soul Egg gain',
+        _ => 'temporary boost',
+      };
+
   Widget _buildResearchTier(int tier, List<ResearchData> items) {
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final unlocked = _engine.isCommonResearchTierUnlocked(tier);
     final requiredLevels =
         tier - 1 < widget.data.commonResearchTierUnlocks.length
@@ -1578,72 +1799,52 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   (_engine.state.commonResearchLevels[item.id] ?? 0)
                       .clamp(0, item.maxLevel),
             );
-    return Card(
-      child: ExpansionTile(
-        initiallyExpanded: tier == 1,
-        title: Text('Research group $tier'),
-        subtitle: Text(
-          unlocked
-              ? '${items.length} upgrades available'
-              : '$previousLevels / $requiredLevels earlier upgrades needed',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: BalanceConfig.researchRowSpacing,
+          ),
+          child: Text(
+            'Tier $tier',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
         ),
-        children: [
-          if (!unlocked)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text('Complete upgrades in previous groups to unlock.'),
-            ),
-          for (var index = 0; index < items.length; index++)
-            _buildResearchItem(index, items[index], unlocked),
-        ],
-      ),
+        for (final item in items)
+          _buildResearchItem(
+            item,
+            unlocked,
+            requiredLevels: requiredLevels,
+            previousLevels: previousLevels,
+          ),
+      ],
     );
   }
 
   Widget _buildResearchItem(
-      int itemIndex, ResearchData item, bool tierUnlocked) {
+    ResearchData item,
+    bool tierUnlocked, {
+    required int requiredLevels,
+    required int previousLevels,
+  }) {
     final level = _engine.state.commonResearchLevels[item.id] ?? 0;
     final cost = _engine.commonResearchCost(item.id);
     final maxed = level >= item.maxLevel;
-    final canBuy = tierUnlocked && !maxed && _engine.state.cash >= cost;
-    return ListTile(
-      title: Text('Upgrade ${itemIndex + 1}'),
-      subtitle: Text(
-        '${_effectLabel(item.effect)} · ${_researchBenefit(item)}'
-        ' · level $level/${item.maxLevel}',
-      ),
-      trailing: TextButton(
-        onPressed: canBuy
-            ? () => _mutate(() => _engine.buyCommonResearch(item.id))
-            : null,
-        child: Text(maxed ? 'MAX' : formatNumber(cost)),
-      ),
+    final requirement = tierUnlocked
+        ? null
+        : 'Unlocks after $requiredLevels total research levels in earlier '
+            'tiers ($previousLevels / $requiredLevels completed).';
+    return _buildResearchCard(
+      item: item,
+      level: level,
+      cost: cost,
+      currency: 'cash',
+      maxed: maxed,
+      affordable: !maxed && _engine.state.cash >= cost,
+      lockedRequirement: requirement,
+      onBuy: () => _mutate(() => _engine.buyCommonResearch(item.id)),
     );
-  }
-
-  String _effectLabel(String effect) {
-    const labels = <String, String>{
-      'layRate': 'egg laying',
-      'eggValue': 'egg value',
-      'hatcheryRefill': 'hatchery refill',
-      'runningBonusPerChicken': 'flock bonus',
-      'habCapacity': 'habitat capacity',
-      'ihrPerHab': 'internal hatcheries',
-      'hatcheryCapacity': 'hatchery stock',
-      'vehicleCapacity': 'vehicle capacity',
-      'fleetSize': 'vehicle slots',
-      'maxRunningBonus': 'flock bonus cap',
-      'vehicleSpeed': 'vehicle speed',
-      'hoverVehicleCapacity': 'advanced vehicle capacity',
-      'portalHabCapacity': 'advanced habitat capacity',
-      'hyperloopVehicleCapacity': 'train capacity',
-      'soulFood': 'earnings per Soul Egg',
-      'prestigeBonus': 'Soul Egg gain',
-      'prophecyBonus': 'Prophecy Egg earnings bonus',
-      'farmValueMult': 'farm value',
-      'holdHatchPerSec': 'hold-to-hatch speed',
-    };
-    return effect.split('+').map((part) => labels[part] ?? part).join(' and ');
   }
 
   Future<void> _confirmPrestige() async {
@@ -1677,16 +1878,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         _showPersistenceError(error);
       }
     }
-  }
-
-  String _researchBenefit(ResearchData item) {
-    if (item.mode == 'add') {
-      return '+${(item.perLevel * 100).toStringAsFixed(0)}% per level';
-    }
-    if (item.mode == 'mul') {
-      return '×${formatNumber(item.perLevel)} per level';
-    }
-    return '+${formatNumber(item.perLevel)} per level';
   }
 
   void _mutate<T>(T Function() action) {
