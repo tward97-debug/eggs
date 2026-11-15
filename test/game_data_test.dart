@@ -36,7 +36,7 @@ void main() {
     expect(data.vehicles.last.firstPrice, 21.124e36);
     expect(data.eggs.first.upgradeFarmValue, 0);
     expect(data.eggs[6].upgradeFarmValue, isNull);
-    expect(BalanceConfig.placeholderEggUpgradeFarmValues['quantum'], 2e19);
+    expect(BalanceConfig.placeholderEggUpgradeFarmValues['quantum'], 4e19);
     expect(data.commonResearch.first.mode, isNotNull);
     expect(data.epicResearch.first.mode, isNull);
     expect(BalanceConfig.vehiclePriceCurveA, hasLength(13));

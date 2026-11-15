@@ -200,6 +200,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   final Stopwatch _hapticStopwatch = Stopwatch();
   Timer? _gameTimer;
   int _lastElapsedMilliseconds = 0;
+  bool _isPausedForLifecycle = false;
+  Future<void> _lifecycleWork = Future<void>.value();
   int _lastHapticMilliseconds =
       -BalanceConfig.hapticFeedbackThrottleMilliseconds;
   int _selectedPage = 0;
@@ -245,9 +247,11 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     _stopwatch.stop();
     _session.onPersistenceError = null;
     unawaited(
-      _session.close().catchError((Object error, StackTrace stackTrace) {
-        _showPersistenceError(error);
-      }),
+      _lifecycleWork
+          .then((_) => _session.close())
+          .catchError((Object error, StackTrace stackTrace) {
+            _showPersistenceError(error);
+          }),
     );
     super.dispose();
   }
@@ -255,16 +259,24 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (!_isPausedForLifecycle) {
+        return;
+      }
+      _isPausedForLifecycle = false;
       _lastElapsedMilliseconds = _stopwatch.elapsedMilliseconds;
-      unawaited(_resumeGame());
-    } else {
-      _gameTimer?.cancel();
-      _gameTimer = null;
-      _droneFlightDuration = 0;
-      _droneFlightElapsed = 0;
-      _droneSecondsUntilSpawn = BalanceConfig.droneSpawnIntervalSec;
-      unawaited(_pauseAndSave());
+      _lifecycleWork = _lifecycleWork.then((_) => _resumeGame());
+      return;
     }
+    if (_isPausedForLifecycle) {
+      return;
+    }
+    _isPausedForLifecycle = true;
+    _gameTimer?.cancel();
+    _gameTimer = null;
+    _droneFlightDuration = 0;
+    _droneFlightElapsed = 0;
+    _droneSecondsUntilSpawn = BalanceConfig.droneSpawnIntervalSec;
+    _lifecycleWork = _lifecycleWork.then((_) => _pauseAndSave());
   }
 
   Future<void> _pauseAndSave() async {

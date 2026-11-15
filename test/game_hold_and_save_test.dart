@@ -333,6 +333,25 @@ void main() {
     await session.close();
   });
 
+  test('repeated background lifecycle events preserve offline time', () async {
+    final startedAt = DateTime.utc(2025, 1, 1);
+    final firstPauseAt = startedAt.add(const Duration(minutes: 1));
+    final session = await GameSession.restore(data, now: startedAt);
+
+    await session.pause(savedAt: firstPauseAt);
+    await session.pause(savedAt: startedAt.add(const Duration(minutes: 2)));
+    expect(session.lastSavedAt, firstPauseAt);
+
+    final progress = await session.resume(
+      now: startedAt.add(const Duration(minutes: 3)),
+    );
+
+    expect(progress.elapsedSeconds, 120);
+    await session.pause(savedAt: startedAt.add(const Duration(minutes: 4)));
+    await session.close();
+    expect(session.lastSavedAt, startedAt.add(const Duration(minutes: 4)));
+  });
+
   test('offline simulation respects silo cap and boost expiry after chunks',
       () {
     final oneLongCatchUp = GameEngine(data: data);

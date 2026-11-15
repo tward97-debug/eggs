@@ -33,6 +33,9 @@ class BalanceConfig {
   static const int saveFormatVersion = 1;
   static const String savePreferenceKey = 'egg_empire_save';
   static const double baseResearchMultiplier = 1;
+  static const int lateCommonResearchCostTier = 6;
+  static const double lateCommonResearchCostMultiplier = 10;
+  static const double highImpactEggResearchMinCostGrowthPerLevel = 5;
   /// PLACEHOLDER running-chicken window and base bonus values.
   static const double runningChickenDurationSeconds = 15;
   static const double runningChickenBonusPerChicken = 0.005;
@@ -91,7 +94,7 @@ class BalanceConfig {
 
   // TODO: verify against wiki; the Quantum threshold is explicitly a placeholder.
   static const Map<String, double> placeholderEggUpgradeFarmValues = {
-    'quantum': 2e19,
+    'quantum': 4e19,
   };
 
   /// PLACEHOLDER: the real farm-value definition is not known.

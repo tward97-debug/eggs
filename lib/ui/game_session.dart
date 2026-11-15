@@ -61,6 +61,7 @@ class GameSession extends ChangeNotifier {
 
   double _holdAccumulator = 0;
   bool _isHoldingHatch = false;
+  bool _isPaused = false;
   Timer? _autosaveTimer;
   Future<void> _saveTail = Future<void>.value();
 
@@ -130,6 +131,9 @@ class GameSession extends ChangeNotifier {
   }
 
   void startAutosave() {
+    if (_isPaused) {
+      return;
+    }
     _autosaveTimer ??= Timer.periodic(
       Duration(seconds: BalanceConfig.autosaveIntervalSeconds),
       (_) => _saveInBackground(),
@@ -145,6 +149,10 @@ class GameSession extends ChangeNotifier {
   }
 
   Future<void> pause({DateTime? savedAt}) async {
+    if (_isPaused) {
+      return;
+    }
+    _isPaused = true;
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     stopHatching();
@@ -152,6 +160,10 @@ class GameSession extends ChangeNotifier {
   }
 
   Future<OfflineProgress> resume({DateTime? now}) async {
+    if (!_isPaused) {
+      throw StateError('Cannot resume a game session that is not paused.');
+    }
+    _isPaused = false;
     final currentTime = (now ?? DateTime.now()).toUtc();
     final elapsedSeconds = math
         .max(
@@ -192,9 +204,15 @@ class GameSession extends ChangeNotifier {
   }
 
   Future<void> close() async {
+    final wasPaused = _isPaused;
+    _isPaused = true;
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     stopHatching();
-    await save();
+    if (wasPaused) {
+      await _saveTail;
+    } else {
+      await save();
+    }
   }
 }

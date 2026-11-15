@@ -30,6 +30,39 @@ void main() {
   });
 
   group('egg ascension and farm value', () {
+    test('uses the tuned ascension thresholds after the second egg', () {
+      final expectedThresholds = [
+        0.0,
+        68e6,
+        7.95e9,
+        480e9,
+        340e12,
+        90e15,
+        4e19,
+        1.6e23,
+        2.6e26,
+        1.3e27,
+        6.5e27,
+        3.25e28,
+        1.625e29,
+        8.125e29,
+        4.0625e30,
+        2.03125e31,
+        1.015625e32,
+        5.078125e32,
+        2.5390625e33,
+      ];
+
+      expect(
+        data.eggs.map(
+          (egg) =>
+              egg.upgradeFarmValue ??
+              BalanceConfig.placeholderEggUpgradeFarmValues[egg.id],
+        ),
+        expectedThresholds,
+      );
+    });
+
     test('traverses the complete configurable egg progression', () {
       final engine = GameEngine(data: data);
 
@@ -38,7 +71,8 @@ void main() {
         final threshold = engine.nextEggUpgradeFarmValue;
         expect(threshold, isNotNull);
         engine.state.cashSpentThisRun = threshold! + 1;
-        expect(engine.canAscend, isTrue, reason: 'before ${data.eggs[index].name}');
+        expect(engine.canAscend, isTrue,
+            reason: 'before ${data.eggs[index].name}');
         expect(engine.ascend(), isTrue);
         expect(engine.currentEgg.id, data.eggs[index].id);
       }
@@ -293,8 +327,8 @@ void main() {
         isTrue,
       );
 
-      final upgraded =
-          engine.state.vehicles.singleWhere((vehicle) => vehicle.slotIndex == 1);
+      final upgraded = engine.state.vehicles
+          .singleWhere((vehicle) => vehicle.slotIndex == 1);
       expect(upgraded.tierIndex, 11);
       expect(upgraded.unitNumber, 1);
       expect(engine.state.vehicles, hasLength(2));
@@ -329,6 +363,53 @@ void main() {
     });
 
     group('common research purchases', () {
+      test('increases all tier six and later research prices tenfold', () {
+        final engine = GameEngine(data: data);
+        final lateTierResearch =
+            data.commonResearch.where((item) => item.tier! >= 6);
+
+        expect(lateTierResearch, isNotEmpty);
+        for (final item in lateTierResearch) {
+          final startingCost =
+              item.maxLevel == 1 ? item.lastCost : item.firstCost;
+          expect(
+            engine.commonResearchCost(item.id),
+            closeTo(startingCost * 10, startingCost * 1e-9),
+            reason: item.id,
+          );
+        }
+      });
+
+      test(
+          'makes repeated high-impact egg-value research at least fivefold '
+          'more expensive per level', () {
+        final engine = GameEngine(data: data);
+        final items = data.commonResearch.where(
+          (item) =>
+              item.effect == 'eggValue' &&
+              item.mode == 'mul' &&
+              item.perLevel >= 2 &&
+              item.maxLevel > 1,
+        );
+
+        expect(items, isNotEmpty);
+        for (final item in items) {
+          var previousCost = engine.commonResearchCost(item.id);
+          for (var level = 1; level < item.maxLevel; level++) {
+            engine.state.commonResearchLevels[item.id] = level;
+            final nextCost = engine.commonResearchCost(item.id);
+            expect(
+              nextCost / previousCost,
+              greaterThanOrEqualTo(
+                BalanceConfig.highImpactEggResearchMinCostGrowthPerLevel - 1e-9,
+              ),
+              reason: '${item.id} at level $level',
+            );
+            previousCost = nextCost;
+          }
+        }
+      });
+
       test('calculates geometric costs and purchases one level at a time', () {
         final engine = GameEngine(data: data);
         final item = data.commonResearch.firstWhere(

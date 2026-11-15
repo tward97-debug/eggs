@@ -648,10 +648,30 @@ class GameEngine {
       data.commonResearchTierBaseCostGrowth / 45,
       item.tier! - 1,
     );
-    final firstCost = item.firstCost * tierGrowthMultiplier;
-    final endCostRatio = math.pow(
+    final lateTierCostMultiplier = item.tier! >=
+            BalanceConfig.lateCommonResearchCostTier
+        ? BalanceConfig.lateCommonResearchCostMultiplier
+        : 1.0;
+    final firstCost =
+        item.firstCost * tierGrowthMultiplier * lateTierCostMultiplier;
+    final configuredEndCostRatio = math.pow(
       item.lastCost / item.firstCost,
       data.commonResearchLevelCostCurveExponent,
+    );
+    final isHighImpactRepeatableEggValueResearch =
+        item.effect == 'eggValue' &&
+            item.mode == 'mul' &&
+            item.perLevel >= 2 &&
+            item.maxLevel > 1;
+    final minimumEndCostRatio = isHighImpactRepeatableEggValueResearch
+        ? math.pow(
+            BalanceConfig.highImpactEggResearchMinCostGrowthPerLevel,
+            item.maxLevel - 1,
+          )
+        : 1.0;
+    final endCostRatio = math.max(
+      configuredEndCostRatio,
+      minimumEndCostRatio,
     );
     final nextLevel = level + 1;
     if (item.maxLevel == 1) {
