@@ -30,37 +30,13 @@ void main() {
   });
 
   group('egg ascension and farm value', () {
-    test('uses the tuned ascension thresholds after the second egg', () {
-      final expectedThresholds = [
-        0.0,
-        68e6,
-        7.95e9,
-        480e9,
-        340e12,
-        90e15,
-        4e19,
-        1.6e23,
-        2.6e26,
-        1.3e27,
-        6.5e27,
-        3.25e28,
-        1.625e29,
-        8.125e29,
-        4.0625e30,
-        2.03125e31,
-        1.015625e32,
-        5.078125e32,
-        2.5390625e33,
-      ];
+    test('uses strictly increasing wiki upgrade thresholds', () {
+      final thresholds = data.eggs.map((egg) => egg.upgradeFarmValue!).toList();
 
-      expect(
-        data.eggs.map(
-          (egg) =>
-              egg.upgradeFarmValue ??
-              BalanceConfig.placeholderEggUpgradeFarmValues[egg.id],
-        ),
-        expectedThresholds,
-      );
+      expect(thresholds.take(3), [0.0, 68e6, 5.3e9]);
+      for (var index = 1; index < thresholds.length; index++) {
+        expect(thresholds[index], greaterThan(thresholds[index - 1]));
+      }
     });
 
     test('traverses the complete configurable egg progression', () {
@@ -70,7 +46,8 @@ void main() {
       for (var index = 1; index < data.eggs.length; index++) {
         final threshold = engine.nextEggUpgradeFarmValue;
         expect(threshold, isNotNull);
-        engine.state.cashSpentThisRun = threshold! + 1;
+        // Unshipped chickens still count 20% towards farm value.
+        engine.state.chickens = threshold!;
         expect(engine.canAscend, isTrue,
             reason: 'before ${data.eggs[index].name}');
         expect(engine.ascend(), isTrue);
@@ -82,28 +59,32 @@ void main() {
       expect(engine.ascend(), isFalse);
     });
 
-    test('calculates farm value from spending and projected income', () {
+    test('calculates farm value with the wiki formula', () {
       final engine = GameEngine(data: data);
-      engine.state.cashSpentThisRun = 100;
       engine.state.chickens = 100;
-      final expectedIncome = math.pow(engine.incomePerSecondWithoutBoosts, 0.8);
 
+      // 500 * L(2) * value(0.25) * lay rate(2) * (Peff + space^0.6).
       expect(
         engine.farmValue,
-        closeTo(
-          (100 * BalanceConfig.farmValueSpentWeight +
-                  expectedIncome * BalanceConfig.farmValueIncomeWindowSec) *
-              (1 + 0.05 * engine.epicResearchLevel('accounting_tricks')),
-          1e-9,
-        ),
+        closeTo(500 * 2 * 0.25 * 2 * (100 + math.pow(150, 0.6)), 1e-6),
       );
     });
 
-    test('fresh-run farm value is zero without spending or income', () {
+    test('farm value counts unshipped chickens at one fifth', () {
       final engine = GameEngine(data: data);
+      engine.state.chickens = 10000;
 
-      expect(engine.incomePerSecondWithoutBoosts, 0);
-      expect(engine.farmValue, 0);
+      // The trike ships 5,000 eggs/min, enough for 2,500 chickens.
+      expect(engine.farmValue, 500 * 2 * 0.25 * 2 * (0.8 * 2500 + 0.2 * 10000));
+    });
+
+    test('silos and internal hatcheries add away hatching to farm value', () {
+      final engine = GameEngine(data: data);
+      engine.state.chickens = 250;
+      final before = engine.farmValue;
+      engine.state.commonResearchLevels['internal_hatcheries'] = 1;
+
+      expect(engine.farmValue - before, 500 * 2 * 0.25 * 2 * (2 * 1 * 60));
     });
 
     test('farm value increases after a purchase', () {
@@ -126,19 +107,6 @@ void main() {
       expect(engine.farmValue, withoutBoosts);
     });
 
-    test('zero income is safe with a non-positive power exponent', () {
-      final engine = GameEngine(
-        data: data,
-        farmValueTuning: const FarmValueTuning(
-          spentWeight: 1,
-          incomeExponent: -1,
-          incomeWindowSec: 600,
-        ),
-      );
-
-      expect(engine.farmValue, 0);
-    });
-
     test('applies Accounting Tricks to the farm value multiplier', () {
       final engine = GameEngine(data: data);
       engine.state.chickens = 100;
@@ -159,7 +127,7 @@ void main() {
       engine.state.siloCount = 3;
       engine.state.activeBoostSeconds['earnings'] = 30;
       engine.state.eggIndex = 0;
-      engine.state.cashSpentThisRun = data.eggs[1].upgradeFarmValue! + 1;
+      engine.state.chickens = data.eggs[1].upgradeFarmValue!;
 
       expect(engine.canAscend, isTrue);
       expect(engine.ascend(), isTrue);
@@ -179,7 +147,7 @@ void main() {
 
     test('does not ascend before the next egg threshold', () {
       final engine = GameEngine(data: data);
-      engine.state.cashSpentThisRun = data.eggs[1].upgradeFarmValue! - 1;
+      engine.state.chickens = 1000;
 
       expect(engine.canAscend, isFalse);
       expect(engine.ascend(), isFalse);
@@ -363,72 +331,23 @@ void main() {
     });
 
     group('common research purchases', () {
-      test('increases all tier six and later research prices tenfold', () {
-        final engine = GameEngine(data: data);
-        final lateTierResearch =
-            data.commonResearch.where((item) => item.tier! >= 6);
-
-        expect(lateTierResearch, isNotEmpty);
-        for (final item in lateTierResearch) {
-          final startingCost =
-              item.maxLevel == 1 ? item.lastCost : item.firstCost;
-          expect(
-            engine.commonResearchCost(item.id),
-            closeTo(startingCost * 10, startingCost * 1e-9),
-            reason: item.id,
-          );
-        }
-      });
-
-      test(
-          'makes repeated high-impact egg-value research at least fivefold '
-          'more expensive per level', () {
-        final engine = GameEngine(data: data);
-        final items = data.commonResearch.where(
-          (item) =>
-              item.effect == 'eggValue' &&
-              item.mode == 'mul' &&
-              item.perLevel >= 2 &&
-              item.maxLevel > 1,
-        );
-
-        expect(items, isNotEmpty);
-        for (final item in items) {
-          var previousCost = engine.commonResearchCost(item.id);
-          for (var level = 1; level < item.maxLevel; level++) {
-            engine.state.commonResearchLevels[item.id] = level;
-            final nextCost = engine.commonResearchCost(item.id);
-            expect(
-              nextCost / previousCost,
-              greaterThanOrEqualTo(
-                BalanceConfig.highImpactEggResearchMinCostGrowthPerLevel - 1e-9,
-              ),
-              reason: '${item.id} at level $level',
-            );
-            previousCost = nextCost;
-          }
-        }
-      });
-
-      test('calculates geometric costs and purchases one level at a time', () {
+      test('reads wiki costs and purchases one level at a time', () {
         final engine = GameEngine(data: data);
         final item = data.commonResearch.firstWhere(
           (research) => research.id == 'comfy_nests',
         );
-        final expectedSecondCost = item.firstCost *
-            math.pow(item.lastCost / item.firstCost, 1 / 49).toDouble();
         engine.state.cash = 1000;
 
-        expect(engine.commonResearchCost(item.id), item.firstCost);
+        expect(engine.commonResearchCost(item.id), 0.502606);
         expect(engine.buyCommonResearch(item.id), isTrue);
         expect(engine.state.commonResearchLevels[item.id], 1);
-        expect(engine.state.cash, 900);
-        expect(engine.state.cashSpentThisRun, 100);
+        expect(engine.state.cash, closeTo(1000 - 0.502606, 1e-9));
+        expect(engine.state.cashSpentThisRun, 0.502606);
         expect(engine.layRateMultiplier, 1.1);
-        expect(
-          engine.commonResearchCost(item.id),
-          closeTo(expectedSecondCost, 1e-9),
-        );
+        expect(engine.commonResearchCost(item.id), 3.25839);
+
+        engine.state.epicResearchLevels['lab_upgrade'] = 10;
+        expect(engine.commonResearchCost(item.id), closeTo(3.25839 / 2, 1e-9));
       });
 
       test('locks higher tiers until the earlier-tier level threshold is met',
@@ -440,7 +359,7 @@ void main() {
         expect(engine.isCommonResearchTierUnlocked(2), isFalse);
         expect(engine.buyCommonResearch('internal_hatcheries'), isFalse);
 
-        engine.state.commonResearchLevels['comfy_nests'] = 10;
+        engine.state.commonResearchLevels['comfy_nests'] = 30;
 
         expect(engine.isCommonResearchTierUnlocked(2), isTrue);
         expect(engine.buyCommonResearch('internal_hatcheries'), isTrue);
@@ -449,10 +368,10 @@ void main() {
 
       test('uses the single-level last cost and rejects exhausted levels', () {
         final engine = GameEngine(data: data);
-        engine.state.commonResearchLevels['comfy_nests'] = 10;
-        engine.state.cash = 1000000;
+        engine.state.commonResearchLevels['comfy_nests'] = 30;
+        engine.state.cash = 2000000;
 
-        expect(engine.commonResearchCost('bigger_eggs'), 225000);
+        expect(engine.commonResearchCost('bigger_eggs'), 1351900);
         expect(engine.buyCommonResearch('bigger_eggs'), isTrue);
         expect(engine.state.commonResearchLevels['bigger_eggs'], 1);
         expect(engine.commonResearchCost('bigger_eggs'), double.infinity);
@@ -522,23 +441,42 @@ void main() {
   });
 
   group('prestige, epic research, and trophies', () {
-    test('calculates Soul Egg gain with epic research and Soul Beacon', () {
+    test('calculates Soul Egg gain with the wiki earnings bands', () {
       final engine = GameEngine(data: data);
-      engine.state.cashEarnedThisPrestige = 120000000;
+      engine.state.cashEarnedThisPrestige = 1e12;
+      // (1e6)^0.15 - (1e-6)^0.15 = 7.817
+      expect(engine.soulEggsGained, 7);
+
       engine.state.epicResearchLevels['prestige_bonus'] = 2;
+      expect(engine.soulEggsGained, 9);
+
+      engine.state.epicResearchLevels.clear();
+      engine.state.cashEarnedThisPrestige = 1e21;
+      // Adds the second band: (1e15)^0.16 - (1e6)^0.16 = 242.07
+      expect(engine.soulEggsGained, 249);
+    });
+
+    test('Soul Beacon multiplies the earnings fed into prestige', () {
+      final engine = GameEngine(data: data);
+      engine.state.chickens = 120;
       engine.state.activeBoostSeconds['soul_beacon'] = 30;
+      engine.state.activeBoostMultipliers['soul_beacon'] = 5;
 
-      final expected = (1.2 *
-              data.boosts
-                  .singleWhere((boost) => boost.id == 'soul_beacon')
-                  .multiplier *
-              math.pow(
-                120,
-                BalanceConfig.soulEggGainExponent,
-              ))
-          .floorToDouble();
+      engine.tick(1);
 
-      expect(engine.soulEggsGained, expected);
+      expect(engine.state.cash, closeTo(1, 1e-9));
+      expect(engine.state.cashEarnedThisPrestige, closeTo(5, 1e-9));
+    });
+
+    test('builds a second silo at the wiki price and stops at the cap', () {
+      final engine = GameEngine(data: data);
+      engine.state.cash = 100000;
+
+      expect(engine.nextSiloPrice, 100000);
+      expect(engine.buySilo(), isTrue);
+      expect(engine.state.siloCount, 2);
+      expect(engine.nextSiloPrice, double.infinity);
+      expect(engine.buySilo(), isFalse);
     });
 
     test('compounds earnings bonus with Prophecy Eggs', () {
@@ -596,7 +534,7 @@ void main() {
     test('prestige resets the run and preserves permanent progress', () {
       final engine = GameEngine(data: data);
       engine.state.cash = 123;
-      engine.state.cashEarnedThisPrestige = 1000000;
+      engine.state.cashEarnedThisPrestige = 10000000;
       engine.state.cashEarnedThisRun = 456;
       engine.state.cashSpentThisRun = 789;
       engine.state.chickens = 25;
@@ -677,7 +615,8 @@ void main() {
         }
       }
 
-      for (var index = 0; index < data.eggs.length; index++) {
+      // The final egg pays a Prophecy Egg reward at every trophy tier.
+      for (var index = 0; index < data.eggs.length - 1; index++) {
         engine.state.eggIndex = index;
         engine.state.chickens = engine.trophyChickenCountThreshold(
           BalanceConfig.trophyTierNames.length - 1,
@@ -704,10 +643,10 @@ void main() {
       expect(BalanceConfig.prophecyEggTrophyReward('superfood'), 4);
       expect(BalanceConfig.prophecyEggTrophyReward('medical'), 3);
       expect(BalanceConfig.prophecyEggTrophyReward('rocket_fuel'), 2);
-      expect(
-        BalanceConfig.prophecyEggTrophyReward(data.eggs.last.id),
-        1,
-      );
+      engine.state.eggIndex = data.eggs.length - 1;
+      final beforeFinalEgg = engine.state.prophecyEggs;
+      engine.tick(1);
+      expect(engine.state.prophecyEggs - beforeFinalEgg, 1 + 2 + 3 + 5 + 10);
     });
 
     test('uses the five fixed wiki chicken-count thresholds', () {
@@ -728,7 +667,7 @@ void main() {
         [1e6, 5e6, 50e6, 2.5e9],
       );
       expect(
-        BalanceConfig.trophyGoldenEggRewards['dilithium'],
+        BalanceConfig.trophyGoldenEggRewards['cinder'],
         [3e3, 4e3, 5e3, 10e3, 25e3],
       );
       expect(BalanceConfig.trophyProphecyEggRewards['edible'], 5);
@@ -748,8 +687,9 @@ void main() {
       final stableIncome = engine.incomePerSecondWithoutBoosts;
 
       expect(engine.runningChickenCount, 10);
-      expect(engine.runningChickenMultiplier, 1.05);
-      expect(engine.cashPerSecond, closeTo(stableIncome * 1.05, 1e-9));
+      const bonus = 1 + 10 * BalanceConfig.runningChickenBonusPerChicken;
+      expect(engine.runningChickenMultiplier, bonus);
+      expect(engine.cashPerSecond, closeTo(stableIncome * bonus, 1e-9));
       expect(engine.farmValue, stableFarmValue);
 
       engine.tick(BalanceConfig.runningChickenDurationSeconds);
@@ -817,7 +757,7 @@ void main() {
           BalanceConfig.piggyBankBoostReward;
       expect(engine.crackPiggyBank(), isTrue);
       expect(
-          engine.state.goldenEggs, closeTo(100 - 0.25 + expectedStored, 1e-9));
+          engine.state.goldenEggs, closeTo(100 - 0.5 + expectedStored, 1e-9));
       expect(engine.state.piggyBankGoldenEggs, 0);
       expect(engine.crackPiggyBank(), isFalse);
     });
@@ -826,7 +766,9 @@ void main() {
   group('drones and boosts', () {
     test('drone cash rewards use farm value and credit farm earnings', () {
       final engine = GameEngine(data: data);
-      engine.state.cashSpentThisRun = 1000;
+      engine.state.chickens = 100;
+      final expected =
+          engine.farmValue * BalanceConfig.droneCashRewardFractions.last;
 
       final reward = engine.collectDrone(
         rewardRoll: 0.9,
@@ -837,10 +779,10 @@ void main() {
 
       expect(reward.isGoldenEggReward, isFalse);
       expect(reward.goldenEggs, 0);
-      expect(reward.cash, 300);
-      expect(engine.state.cash, 300);
-      expect(engine.state.cashEarnedThisPrestige, 300);
-      expect(engine.state.cashEarnedThisRun, 300);
+      expect(reward.cash, expected);
+      expect(engine.state.cash, expected);
+      expect(engine.state.cashEarnedThisPrestige, expected);
+      expect(engine.state.cashEarnedThisRun, expected);
     });
 
     test('regular and elite drone Golden Egg rewards follow configured tiers',
@@ -886,25 +828,22 @@ void main() {
       engine.state.goldenEggs = 1000;
       engine.state.chickens = 100;
       final baseIncome = engine.cashPerSecond;
-      final feedOption = engine
-          .boostOptions('best_bird_feed')
-          .singleWhere((option) => option.label.startsWith('Basic ×2'));
-      final beaconOption = engine
-          .boostOptions('boost_beacon')
-          .singleWhere((option) => option.label.startsWith('Basic ×10'));
+      // Cheapest tiers: feed x3 for 20 minutes, beacon x2 for 30 minutes.
+      final feedOption = engine.boostOptions('best_bird_feed').first;
+      final beaconOption = engine.boostOptions('boost_beacon').first;
 
       expect(engine.buyBoost('best_bird_feed', feedOption.id), isTrue);
-      expect(engine.cashPerSecond, closeTo(baseIncome * 2, 1e-9));
+      expect(engine.cashPerSecond, closeTo(baseIncome * 3, 1e-9));
       expect(engine.buyBoost('boost_beacon', beaconOption.id), isTrue);
-      expect(engine.cashPerSecond, closeTo(baseIncome * 20, 1e-9));
-      expect(engine.state.goldenEggs, closeTo(1000 - 0.25 - 50, 1e-9));
+      expect(engine.cashPerSecond, closeTo(baseIncome * 6, 1e-9));
+      expect(engine.state.goldenEggs, closeTo(1000 - 0.5 - 10, 1e-9));
 
-      engine.tick(700);
+      engine.tick(2000);
 
       expect(engine.state.activeBoostSeconds, isEmpty);
       expect(engine.state.activeBoostMultipliers, isEmpty);
       expect(engine.cashPerSecond, baseIncome);
-      expect(engine.state.cash, closeTo(baseIncome * (600 * 20 + 100), 1e-6));
+      expect(engine.state.cash, closeTo(baseIncome * (1200 * 6 + 800), 1e-6));
     });
 
     test('Tachyon boost multiplies internal hatchery growth', () {
@@ -916,22 +855,21 @@ void main() {
       engine.state.habs.add(const HabOwnership(1, 1));
       engine.state.commonResearchLevels['internal_hatcheries'] = 10;
       engine.state.goldenEggs = 100;
-      final option = engine
-          .boostOptions('tachyon_prism')
-          .singleWhere((item) => item.label.startsWith('Basic ×2'));
+      final option = engine.boostOptions('tachyon_prism').first;
 
       expect(engine.buyBoost('tachyon_prism', option.id), isTrue);
       engine.tick(60, refillHatchery: false);
       baseline.tick(60, refillHatchery: false);
 
-      expect(engine.state.chickens, baseline.state.chickens * 2);
+      expect(
+        engine.state.chickens,
+        closeTo(baseline.state.chickens * 10, 1e-9),
+      );
     });
 
     test('boost levels and timers survive save-state JSON round-trip', () {
       final engine = GameEngine(data: data);
-      final option = engine
-          .boostOptions('best_bird_feed')
-          .singleWhere((item) => item.label.startsWith('Basic ×5'));
+      final option = engine.boostOptions('best_bird_feed').first;
       engine.state.goldenEggs = 100;
       expect(engine.buyBoost('best_bird_feed', option.id), isTrue);
 
@@ -940,7 +878,7 @@ void main() {
 
       expect(
         restoredEngine.activeBoostMultiplier('earnings'),
-        5,
+        3,
       );
       expect(
         restored.activeBoostSeconds['best_bird_feed'],

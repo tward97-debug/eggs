@@ -63,6 +63,27 @@ class GameSaveRepository {
     );
   }
 
+  /// Wipes a save from an older format; the economy changed too much to
+  /// migrate. Returns whether a save was wiped.
+  Future<bool> clearIfOutdated() async {
+    final preferences = await SharedPreferences.getInstance();
+    final serialized = preferences.getString(BalanceConfig.savePreferenceKey);
+    if (serialized == null) {
+      return false;
+    }
+    try {
+      final decoded = jsonDecode(serialized);
+      final version = decoded is Map<String, Object?> ? decoded['version'] : 0;
+      if (version is! int || version >= BalanceConfig.saveFormatVersion) {
+        return false;
+      }
+    } on FormatException {
+      return false;
+    }
+    await clear();
+    return true;
+  }
+
   Future<void> save(GameState state, DateTime savedAt) async {
     await saveSnapshot(state.toJson(), savedAt);
   }

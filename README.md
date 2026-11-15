@@ -33,5 +33,13 @@ release so Android can recognize it as newer. The Android launcher icon is defin
 
 ## Balance values
 
-PLACEHOLDER and TUNABLE values are centralized in
-`lib/config/balance.dart` or the JSON files under `assets/data/`.
+The economy follows the Egg, Inc. wiki: egg values and upgrade thresholds
+(`assets/data/eggs.json`), per-level research prices
+(`assets/data/common_research.json`), boost tiers (`assets/data/boosts.json`),
+and the farm value, Soul Egg and silo formulas in `lib/game/engine.dart`.
+Values marked TUNABLE or PLACEHOLDER in `lib/config/balance.dart` are our own
+(hatchery rates, running chicken bonus, drone rewards, Golden Egg price scale).
+
+`test/balance_sim_test.dart` is the pacing gate: a simulated player must reach
+each of the first three egg upgrades in 10 to 30 minutes. Run `flutter test`
+after any balance change.

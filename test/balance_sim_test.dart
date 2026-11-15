@@ -7,49 +7,60 @@ import 'package:egg_empire/data/game_data.dart';
 import 'package:egg_empire/game/engine.dart';
 
 void main() {
-  test('runs a bounded balance diagnostic without tuning values', () async {
+  late GameData data;
+
+  setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    final data = await const GameDataLoader().load();
-    final watch = Stopwatch()..start();
-    final secondsPerEgg = _simulate(
-      data,
-      const FarmValueTuning.configured(),
-      maxEggIndex: 1,
+    data = await const GameDataLoader().load();
+  });
+
+  // Pacing gate. The simulated player holds the hatch button, buys the best
+  // payback purchase it can afford and upgrades eggs as soon as it can. It
+  // collects no drones, so real play is somewhat faster. Bands are wide on
+  // purpose: they catch a broken economy, not small tuning changes.
+  test('a fresh farm reaches the first three egg upgrades at a steady pace',
+      () {
+    final run = _simulate(data, maxEggIndex: 3);
+    // ignore: avoid_print
+    print(_formatTable(run.secondsPerEgg, data.eggs));
+
+    expect(run.secondsPerEgg, hasLength(3));
+    for (final seconds in run.secondsPerEgg) {
+      expect(seconds, inInclusiveRange(10 * 60, 30 * 60));
+    }
+    expect(
+      run.secondsPerEgg.reduce((total, seconds) => total + seconds),
+      lessThan(75 * 60),
     );
-    watch.stop();
-    // ignore: avoid_print
-    print('simulation runtime=${watch.elapsedMilliseconds}ms');
-    // ignore: avoid_print
-    print(_formatTable(secondsPerEgg, data.eggs));
-    expect(secondsPerEgg, isNotEmpty);
-    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    // About an hour in, a first prestige already pays (wiki Soul Egg formula).
+    expect(run.soulEggsGained, greaterThanOrEqualTo(2));
+  });
+
+  test('soul eggs make the next run clearly faster', () {
+    final fresh = _simulate(data, maxEggIndex: 1);
+    final prestiged = _simulate(data, maxEggIndex: 1, soulEggs: 20);
+
+    expect(
+      prestiged.secondsPerEgg.single,
+      lessThan(fresh.secondsPerEgg.single * 0.7),
+    );
   });
 }
 
-List<double> _simulate(
-  GameData data,
-  FarmValueTuning tuning, {
+({List<double> secondsPerEgg, double soulEggsGained}) _simulate(
+  GameData data, {
   int? maxEggIndex,
+  double soulEggs = 0,
 }) {
-  final engine = GameEngine(data: data, farmValueTuning: tuning);
+  final engine = GameEngine(data: data)..state.soulEggs = soulEggs;
   final secondsPerEgg = <double>[];
   var secondsOnCurrentEgg = 0.0;
-  var purchaseCount = 0;
-  var totalPurchaseCount = 0;
-  final wallWatch = Stopwatch()..start();
   const maxSecondsPerEgg = 2000000.0;
 
   while (engine.eggIndex + 1 < data.eggs.length &&
       secondsOnCurrentEgg < maxSecondsPerEgg) {
     if (engine.canAscend) {
       secondsPerEgg.add(secondsOnCurrentEgg);
-      // ignore: avoid_print
-      print(
-        'diagnostic egg=${engine.eggIndex + 1} purchases=$purchaseCount '
-        'wall=${wallWatch.elapsedMilliseconds}ms',
-      );
-      totalPurchaseCount += purchaseCount;
-      purchaseCount = 0;
       engine.ascend();
       secondsOnCurrentEgg = 0;
       if (maxEggIndex != null && engine.eggIndex >= maxEggIndex) break;
@@ -60,7 +71,6 @@ List<double> _simulate(
     final candidate = _bestAffordableInvestment(engine, candidates);
     if (candidate != null) {
       candidate.buy(engine);
-      purchaseCount++;
       continue;
     }
 
@@ -68,6 +78,14 @@ List<double> _simulate(
             engine.state.chickens < engine.totalHabCapacity
         ? engine.holdHatchPerSecond
         : 0.0;
+    if (hatchRate > 0) {
+      // Same path as the app while the hatch button is held, so the running
+      // chicken bonus counts. Drones are not simulated.
+      engine.tick(1, refillHatchery: false);
+      engine.holdHatch(1, accumulated: 0);
+      secondsOnCurrentEgg += 1;
+      continue;
+    }
     final nextCost = candidates
         .where((item) => item.cost.isFinite && item.cost > engine.state.cash)
         .map((item) => item.cost)
@@ -82,35 +100,18 @@ List<double> _simulate(
     engine.tick(step, manualHatchPerSecond: hatchRate);
     secondsOnCurrentEgg += step;
   }
-  // ignore: avoid_print
-  print('diagnostic total purchases=$totalPurchaseCount');
-  return secondsPerEgg;
+  return (
+    secondsPerEgg: secondsPerEgg,
+    soulEggsGained: engine.soulEggsGained,
+  );
 }
 
 String _formatTable(List<double> seconds, List<EggData> eggs) {
-  final rows = <String>[
-    'egg | seconds | ratio to previous | pass/fail',
-    '--- | ---: | ---: | :---:',
-  ];
-  var allPass = seconds.isNotEmpty &&
-      seconds.first.isFinite &&
-      seconds.first >= 240 &&
-      seconds.first <= 600;
-  for (var index = 0; index < seconds.length; index++) {
-    final elapsed = seconds[index];
-    final ratio = index == 0 ? null : elapsed / seconds[index - 1];
-    final passes = elapsed.isFinite &&
-        (index == 0
-            ? elapsed >= 240 && elapsed <= 600
-            : elapsed > seconds[index - 1] && ratio! >= 1.5 && ratio <= 3.0);
-    allPass &= passes;
-    rows.add(
-      '${eggs[index + 1].name} | ${_formatSeconds(elapsed)} | '
-      '${ratio == null ? "—" : ratio.toStringAsFixed(2)} | '
-      '${passes ? "PASS" : "FAIL"}',
-    );
-  }
-  return '${rows.join('\n')}\nOverall: ${allPass ? "PASS" : "FAIL"}';
+  return [
+    'egg | minutes',
+    for (var index = 0; index < seconds.length; index++)
+      '${eggs[index + 1].name} | ${(seconds[index] / 60).toStringAsFixed(1)}',
+  ].join('\n');
 }
 
 double? _secondsUntilNextEvent(
@@ -164,9 +165,6 @@ double? _secondsUntilNextEvent(
   return upperBound;
 }
 
-String _formatSeconds(double seconds) =>
-    seconds.isFinite ? seconds.toStringAsFixed(0) : 'not reached';
-
 _Investment? _bestAffordableInvestment(
   GameEngine engine,
   List<_Investment> candidates,
@@ -175,10 +173,14 @@ _Investment? _bestAffordableInvestment(
   final trialEngine = GameEngine(
     data: engine.data,
     state: _copyState(engine.state),
-    farmValueTuning: engine.farmValueTuning,
   );
+  // When habitats and shipping cap each other, no single purchase raises
+  // income; fall back to whatever raises either cap most cheaply.
+  final baselinePotential = _projectedIncomeRate(engine, uncapped: true);
   _Investment? best;
+  _Investment? bestUnblocker;
   var bestPayback = double.infinity;
+  var bestUnblockerPayback = double.infinity;
   for (final candidate in candidates) {
     if (!candidate.cost.isFinite || candidate.cost > engine.state.cash) {
       continue;
@@ -189,6 +191,13 @@ _Investment? _bestAffordableInvestment(
     }
     final incomeIncrease = _projectedIncomeRate(trialEngine) - baselineIncome;
     if (incomeIncrease <= 0) {
+      final potentialIncrease =
+          _projectedIncomeRate(trialEngine, uncapped: true) - baselinePotential;
+      if (potentialIncrease > 0 &&
+          candidate.cost / potentialIncrease < bestUnblockerPayback) {
+        bestUnblockerPayback = candidate.cost / potentialIncrease;
+        bestUnblocker = candidate;
+      }
       continue;
     }
     final payback = candidate.cost / incomeIncrease;
@@ -197,7 +206,7 @@ _Investment? _bestAffordableInvestment(
       best = candidate;
     }
   }
-  return best;
+  return best ?? bestUnblocker;
 }
 
 void _restoreTrialState(GameState target, GameState source) {
@@ -214,7 +223,7 @@ void _restoreTrialState(GameState target, GameState source) {
     ..addAll(source.commonResearchLevels);
 }
 
-double _projectedIncomeRate(GameEngine source) {
+double _projectedIncomeRate(GameEngine source, {bool uncapped = false}) {
   final engine = source;
   final commonMultipliers = <String, double>{};
   final flatBonuses = <String, double>{};
@@ -339,12 +348,12 @@ double _projectedIncomeRate(GameEngine source) {
   }
   final layRateMultiplier =
       commonMultiplier('layRate') * epicMultiplier('layRate');
-  final eggsPerMinute = math.min(
-    projectedChickens *
-        BalanceConfig.baseEggsPerChickenPerMinute *
-        layRateMultiplier,
-    shippingCapacity,
-  );
+  final laidPerMinute = projectedChickens *
+      BalanceConfig.baseEggsPerChickenPerMinute *
+      layRateMultiplier;
+  final eggsPerMinute = uncapped
+      ? laidPerMinute + shippingCapacity
+      : math.min(laidPerMinute, shippingCapacity);
   return eggsPerMinute *
       engine.currentEgg.valuePerEgg *
       commonMultiplier('eggValue') /
@@ -420,6 +429,20 @@ List<_Investment> _investmentCandidates(GameEngine engine) {
           id: 'vehicle-$tier',
           cost: engine.vehiclePrice(tier, unit),
           buy: (target) => target.buyVehicle(tier),
+        ),
+      );
+    }
+  }
+  for (final vehicle in engine.state.vehicles) {
+    for (var tier = vehicle.tierIndex + 1;
+        tier < engine.data.vehicles.length;
+        tier++) {
+      candidates.add(
+        _Investment(
+          id: 'vehicle-${vehicle.slotIndex}-tier-$tier',
+          cost: engine.vehicleUpgradePrice(tier),
+          buy: (target) =>
+              target.upgradeVehicle(vehicle.slotIndex, targetTierIndex: tier),
         ),
       );
     }
