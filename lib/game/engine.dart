@@ -522,6 +522,9 @@ class GameEngine {
     return data.habs[tierIndex].slotPrices[targetSlot] * _habPriceMultiplier;
   }
 
+  double habUpgradePrice(int tierIndex, int slotIndex) =>
+      data.habs[tierIndex].slotPrices[slotIndex] * _habPriceMultiplier;
+
   double get _habPriceMultiplier => 1 - epicResearchEffect('habCostReduction');
 
   /// Interpolates the tunable normalized unit curves by vehicle tier.
@@ -958,8 +961,7 @@ class GameEngine {
       return false;
     }
 
-    final price =
-        data.habs[nextTier].slotPrices[slotIndex] * _habPriceMultiplier;
+    final price = habUpgradePrice(nextTier, slotIndex);
     return _spendCash(
       price,
       () => state.habs[ownedIndex] = HabOwnership(nextTier, slotIndex),

@@ -583,7 +583,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       FarmView(
         engine: _engine,
         formatNumber: formatNumber,
-        droneProgress: _hasActiveDrone ? _droneFlightProgress : null,
+        droneVisible: _hasActiveDrone,
         onCollectDrone: _collectDrone,
         onHatchStart: _startHatching,
         onHatchStop: _session.stopHatching,
@@ -742,8 +742,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         title: 'Habitats',
         icon: Icons.home_work_outlined,
         children: (setSheetState) => [
-          for (var tier = 0; tier < widget.data.habs.length; tier++)
-            _buildHabitatTierRow(tier, setSheetState: setSheetState),
+          for (var slot = 0; slot < BalanceConfig.maximumHabCount; slot++)
+            _buildHabitatSlot(slot, setSheetState),
         ],
       );
 
@@ -761,8 +761,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
               ),
             ),
           ),
-          for (var tier = 0; tier < widget.data.vehicles.length; tier++)
-            _buildVehicleTierRow(tier, setSheetState: setSheetState),
+          for (var slot = 0; slot < _engine.maximumFleetSize; slot++)
+            _buildVehicleSlot(slot, setSheetState),
         ],
       );
 
@@ -833,142 +833,130 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     );
   }
 
-  double _nextHabitatTierPrice(int tier) {
-    if (tier == 0) {
-      final availableSlots = List<int>.generate(
-        BalanceConfig.maximumHabCount,
-        (index) => index,
-      ).where(
-        (slotIndex) =>
-            !_engine.state.habs.any((hab) => hab.slotIndex == slotIndex),
-      );
-      final prices = availableSlots
-          .map((slotIndex) => _engine.habPrice(0, slotIndex: slotIndex))
-          .toList();
-      return prices.isEmpty ? double.infinity : prices.reduce(math.min);
-    }
-
-    final prices = _engine.state.habs
-        .where((hab) => hab.tierIndex < tier)
-        .map((hab) => widget.data.habs[tier].slotPrices[hab.slotIndex])
-        .toList();
-    return prices.isEmpty ? double.infinity : prices.reduce(math.min);
+  Widget _buildHabitatSlot(int slot, StateSetter setSheetState) {
+    final habs = widget.data.habs;
+    final owned =
+        _engine.state.habs.where((hab) => hab.slotIndex == slot).firstOrNull;
+    String capacity(int tier) =>
+        '${formatNumber(_engine.capacityForHab(tier))} chickens capacity';
+    return _buildSlotCard(
+      keyName: 'habitat-slot-$slot',
+      icon: owned == null ? Icons.add_home_outlined : Icons.house,
+      title: 'Slot ${slot + 1} · '
+          '${owned == null ? 'Empty' : habs[owned.tierIndex].name}',
+      subtitle: owned == null ? 'Tap to build' : capacity(owned.tierIndex),
+      options: [
+        if (owned == null)
+          _buildSlotOption(
+            keyName: 'buy-habitat-slot-$slot',
+            name: habs.first.name,
+            detail: capacity(0),
+            price: _engine.habPrice(0, slotIndex: slot),
+            buy: () => _engine.buyHab(0, slotIndex: slot),
+            setSheetState: setSheetState,
+          )
+        else
+          for (var tier = owned.tierIndex + 1; tier < habs.length; tier++)
+            _buildSlotOption(
+              keyName: 'upgrade-habitat-slot-$slot-tier-$tier',
+              name: habs[tier].name,
+              detail: capacity(tier),
+              price: _engine.habUpgradePrice(tier, slot),
+              buy: () => _engine.upgradeHab(
+                owned.tierIndex,
+                slot,
+                targetTierIndex: tier,
+              ),
+              setSheetState: setSheetState,
+            ),
+      ],
+    );
   }
 
-  Widget _buildHabitatTierRow(
-    int tier, {
-    required StateSetter? setSheetState,
+  Widget _buildVehicleSlot(int slot, StateSetter setSheetState) {
+    final vehicles = widget.data.vehicles;
+    final owned = _engine.state.vehicles
+        .where((vehicle) => vehicle.slotIndex == slot)
+        .firstOrNull;
+    String capacity(int tier) =>
+        '${formatNumber(_engine.capacityForVehicle(tier))} eggs/min capacity';
+    // The free starter vehicle can only be owned once.
+    bool available(int tier) =>
+        vehicles[tier].firstPrice > 0 ||
+        !_engine.state.vehicles.any((vehicle) => vehicle.tierIndex == tier);
+    return _buildSlotCard(
+      keyName: 'vehicle-slot-$slot',
+      icon: owned == null
+          ? Icons.add_circle_outline
+          : Icons.local_shipping_outlined,
+      title: 'Slot ${slot + 1} · '
+          '${owned == null ? 'Empty' : vehicles[owned.tierIndex].name}',
+      subtitle: owned == null ? 'Tap to buy' : capacity(owned.tierIndex),
+      options: [
+        for (var tier = owned == null ? 0 : owned.tierIndex + 1;
+            tier < vehicles.length;
+            tier++)
+          if (available(tier))
+            _buildSlotOption(
+              keyName: 'buy-vehicle-slot-$slot-tier-$tier',
+              name: vehicles[tier].name,
+              detail: capacity(tier),
+              price: _engine.vehicleUpgradePrice(tier),
+              buy: owned == null
+                  ? () => _engine.buyVehicle(tier, slotIndex: slot)
+                  : () => _engine.upgradeVehicle(slot, targetTierIndex: tier),
+              setSheetState: setSheetState,
+            ),
+      ],
+    );
+  }
+
+  /// One habitat or vehicle slot; tapping it reveals what it can become.
+  Widget _buildSlotCard({
+    required String keyName,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required List<Widget> options,
   }) {
-    final habitat = widget.data.habs[tier];
-    final owned =
-        _engine.state.habs.where((hab) => hab.tierIndex == tier).length;
-    final price = _nextHabitatTierPrice(tier);
-    final canBuy = price.isFinite && _engine.state.cash >= price;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(
-          BalanceConfig.managementMenuContentPadding,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(habitat.name, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
-            Text('$owned / ${BalanceConfig.maximumHabCount} owned'),
-            Text(
-              '${formatNumber(_engine.capacityForHab(tier))} chickens capacity',
-            ),
-            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Next: ${price.isFinite ? '${formatNumber(price)} cash' : 'Unavailable'}',
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: BalanceConfig.researchMinimumTextSize,
-                    ),
-                  ),
-                ),
-                FilledButton(
-                  key: ValueKey('buy-habitat-tier-$tier'),
-                  onPressed: canBuy
-                      ? () => _buyHabitatTier(
-                            tier,
-                            setSheetState: setSheetState,
-                          )
-                      : null,
-                  child: const Text('Buy'),
-                ),
-              ],
-            ),
-          ],
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: PageStorageKey(keyName),
+        shape: const Border(),
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        children: options.isEmpty
+            ? const [ListTile(title: Text('Fully upgraded'))]
+            : options,
       ),
     );
   }
 
-  Widget _buildVehicleTierRow(
-    int tier, {
-    required StateSetter? setSheetState,
+  Widget _buildSlotOption({
+    required String keyName,
+    required String name,
+    required String detail,
+    required double price,
+    required bool Function() buy,
+    required StateSetter setSheetState,
   }) {
-    final vehicle = widget.data.vehicles[tier];
-    final owned =
-        _engine.state.vehicles.where((item) => item.tierIndex == tier).length;
-    final price = _engine.vehicleUpgradePrice(tier);
-    final freeTierAlreadyOwned = vehicle.firstPrice == 0 && owned > 0;
-    final hasSlot = _engine.state.vehicles.length < _engine.maximumFleetSize;
-    final canBuy =
-        hasSlot && !freeTierAlreadyOwned && _engine.state.cash >= price;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(
-          BalanceConfig.managementMenuContentPadding,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(vehicle.name, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
-            Text(
-              '$owned / ${formatNumber(_engine.maximumFleetSize)} owned',
-            ),
-            Text(
-              '${formatNumber(_engine.capacityForVehicle(tier))} eggs/min capacity',
-            ),
-            const SizedBox(height: BalanceConfig.managementMenuItemSpacing),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Next: ${formatNumber(price)} cash',
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: BalanceConfig.researchMinimumTextSize,
-                    ),
-                  ),
-                ),
-                FilledButton(
-                  key: ValueKey('buy-vehicle-tier-$tier'),
-                  onPressed: canBuy
-                      ? () => _buyVehicleTier(
-                            tier,
-                            setSheetState: setSheetState,
-                          )
-                      : null,
-                  child: const Text('Buy'),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return ListTile(
+      dense: true,
+      title: Text(name),
+      subtitle: Text(detail),
+      trailing: FilledButton(
+        key: ValueKey(keyName),
+        onPressed: _engine.state.cash >= price
+            ? () {
+                _mutate(buy);
+                setSheetState(() {});
+              }
+            : null,
+        child: Text(price == 0 ? 'Free' : '\$${formatNumber(price)}'),
       ),
     );
-  }
-
-  void _buyVehicleTier(int tier, {required StateSetter? setSheetState}) {
-    _mutate(() => _engine.buyVehicle(tier));
-    setSheetState?.call(() {});
   }
 
   Widget _buildCashBalanceHeader() {
@@ -987,83 +975,6 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _buyHabitatTier(
-    int tier, {
-    required StateSetter? setSheetState,
-  }) async {
-    if (tier == 0) {
-      final slotIndex = List<int>.generate(
-        BalanceConfig.maximumHabCount,
-        (index) => index,
-      ).firstWhere(
-        (slotIndex) =>
-            !_engine.state.habs.any((hab) => hab.slotIndex == slotIndex),
-        orElse: () => -1,
-      );
-      if (slotIndex >= 0) {
-        _mutate(() => _engine.buyHab(0, slotIndex: slotIndex));
-        setSheetState?.call(() {});
-      }
-      return;
-    }
-
-    final eligibleHabs =
-        _engine.state.habs.where((hab) => hab.tierIndex < tier).toList();
-    final slotIndex = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Upgrade to ${widget.data.habs[tier].name}'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final hab in eligibleHabs)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: BalanceConfig.managementMenuItemSpacing,
-                    ),
-                    child: OutlinedButton(
-                      onPressed: _engine.state.cash >=
-                              widget.data.habs[tier].slotPrices[hab.slotIndex]
-                          ? () => Navigator.of(dialogContext).pop(hab.slotIndex)
-                          : null,
-                      child: Text(
-                        'Habitat ${hab.slotIndex + 1} · '
-                        'Tier ${hab.tierIndex + 1} · '
-                        '${formatNumber(widget.data.habs[tier].slotPrices[hab.slotIndex])} cash',
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-    if (slotIndex != null && mounted) {
-      final hab = _engine.state.habs.firstWhere(
-        (item) => item.slotIndex == slotIndex,
-      );
-      _mutate(
-        () => _engine.upgradeHab(
-          hab.tierIndex,
-          slotIndex,
-          targetTierIndex: tier,
-        ),
-      );
-      setSheetState?.call(() {});
-    }
   }
 
   Widget _buildResearchPage() {
@@ -1647,18 +1558,16 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   (_engine.state.commonResearchLevels[item.id] ?? 0)
                       .clamp(0, item.maxLevel),
             );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ExpansionTile(
+      key: PageStorageKey('research-tier-$tier'),
+      initiallyExpanded: unlocked,
+      tilePadding: EdgeInsets.zero,
+      shape: const Border(),
+      title: Text('Tier $tier', style: Theme.of(context).textTheme.titleLarge),
+      subtitle: unlocked
+          ? null
+          : Text('Locked · $previousLevels / $requiredLevels levels'),
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: BalanceConfig.researchRowSpacing,
-          ),
-          child: Text(
-            'Tier $tier',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-        ),
         for (final item in items)
           _buildResearchItem(
             item,

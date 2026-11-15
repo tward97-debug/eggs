@@ -11,7 +11,7 @@ class FarmView extends StatelessWidget {
     super.key,
     required this.engine,
     required this.formatNumber,
-    required this.droneProgress,
+    required this.droneVisible,
     required this.onCollectDrone,
     required this.onHatchStart,
     required this.onHatchStop,
@@ -26,8 +26,8 @@ class FarmView extends StatelessWidget {
   final GameEngine engine;
   final String Function(double) formatNumber;
 
-  /// Null when no drone is flying, otherwise 0..1 across the sky.
-  final double? droneProgress;
+  /// The drone hovers in one spot for its short visible window.
+  final bool droneVisible;
   final VoidCallback onCollectDrone;
   final VoidCallback onHatchStart;
   final VoidCallback onHatchStop;
@@ -173,7 +173,6 @@ class FarmView extends StatelessWidget {
 
   Widget _buildScene(ThemeData theme) {
     final runningBonus = engine.runningChickenMultiplier;
-    final drone = droneProgress;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       clipBehavior: Clip.antiAlias,
@@ -188,9 +187,9 @@ class FarmView extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          if (drone != null)
+          if (droneVisible)
             Align(
-              alignment: Alignment(drone * 2 - 1, -0.55),
+              alignment: const Alignment(0, -0.55),
               child: SizedBox(
                 width: BalanceConfig.droneButtonDiameter,
                 height: BalanceConfig.droneButtonDiameter,

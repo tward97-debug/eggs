@@ -57,8 +57,19 @@ void main() {
     );
     expect(
         find.byKey(const ValueKey('management-cash-header')), findsOneWidget);
-    expect(find.byKey(const ValueKey('buy-habitat-tier-0')), findsOneWidget);
+    expect(find.textContaining('Slot '), findsNWidgets(4));
+    expect(find.text('Slot 1 · Coop'), findsOneWidget);
     expect(find.textContaining('chickens capacity'), findsWidgets);
+    expect(find.byKey(const ValueKey('buy-habitat-slot-1')), findsNothing);
+    await tester.tap(find.text('Slot 2 · Empty'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('buy-habitat-slot-1')), findsOneWidget);
+    await tester.tap(find.text('Slot 1 · Coop'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('upgrade-habitat-slot-0-tier-1')),
+      findsOneWidget,
+    );
     await tester.tap(find.byTooltip('Close Habitats'));
     await tester.pumpAndSettle();
 
@@ -73,8 +84,20 @@ void main() {
           .data,
       'Transport',
     );
-    expect(find.byKey(const ValueKey('buy-vehicle-tier-0')), findsOneWidget);
+    expect(find.textContaining('Slot '), findsNWidgets(4));
+    expect(find.text('Slot 1 · Trike'), findsOneWidget);
     expect(find.textContaining('eggs/min capacity'), findsWidgets);
+    await tester.tap(find.text('Slot 2 · Empty'));
+    await tester.pumpAndSettle();
+    // The free trike is already owned, so the first option is the van.
+    expect(
+      find.byKey(const ValueKey('buy-vehicle-slot-1-tier-0')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('buy-vehicle-slot-1-tier-1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('farm screen fits a narrow phone without overflowing',
@@ -161,15 +184,30 @@ void main() {
     final lockedRow = find.byKey(
       ValueKey('research-item-${lockedResearch.id}'),
     );
+    // Locked tiers start collapsed; unlocked ones start open.
+    expect(lockedRow, findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Tier 2'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Tier 2'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       lockedRow,
       400,
       scrollable: find.byType(Scrollable).first,
     );
+
     expect(
       find.textContaining('Unlocks after 30 total research levels'),
       findsWidgets,
     );
+
+    await tester.ensureVisible(find.text('Tier 2'));
+    await tester.tap(find.text('Tier 2'));
+    await tester.pumpAndSettle();
+    expect(lockedRow, findsNothing);
   });
 
   testWidgets('haptic feedback setting is only shown in Settings',
