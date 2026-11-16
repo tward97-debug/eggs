@@ -228,7 +228,8 @@ class GardenView extends StatelessWidget {
             ? '${formatNumber(crop.growHours)} h · ${_rewardLabel(crop)}'
             : 'Locked · ${engine.cropHarvested(unlockCrop!)} / '
                 '${crop.unlockHarvests} ${engine.crop(unlockCrop).name} '
-                'harvested',
+                'harvested'
+                '${crop.unlockRewardSoulEggPercent > 0 ? ' · reward +${formatNumber(crop.unlockRewardSoulEggPercent)}% Soul Eggs' : ''}',
       ),
       trailing: unlocked
           ? FilledButton(

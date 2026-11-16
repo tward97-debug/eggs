@@ -48,7 +48,9 @@ after any balance change.
 
 The Garden (More menu) replaces Prophecy Eggs. Crops grow in real time from a
 planting timestamp, are ready for 45 minutes, then wither. The four corn crops
-pay Soul Eggs, Candy Corn compounds the Soul Egg bonus (8 plots harvested
+pay a few Soul Eggs, and finishing each one's harvest count pays a one-time
+share of the Soul Eggs you hold (sized so the garden about doubles two weeks
+of Soul Egg progress; `test/balance_sim_test.dart` checks this), Candy Corn compounds the Soul Egg bonus (8 plots harvested
 daily for a year is worth about 120 Prophecy Eggs), and the four utility crops
 grow the strongest version of each boost, which can no longer be bought.
 All tuning is in `assets/data/garden.json`; the rules are in

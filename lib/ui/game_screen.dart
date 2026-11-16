@@ -1658,6 +1658,30 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     _session.refresh();
     unawaited(_session.save().catchError(_showPersistenceError));
     unawaited(GardenNotifications.sync(_engine, askPermission: planted));
+    final rewards = _engine.state.garden.newUnlockRewards;
+    if (rewards.isNotEmpty) {
+      final message = [
+        for (final reward in rewards)
+          '${reward.cropName} unlocked: '
+              '+${formatNumber(reward.soulEggs)} Soul Eggs',
+      ].join('\n');
+      rewards.clear();
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Garden milestone'),
+            content: Text(message),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Nice'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   void _mutate<T>(T Function() action) {

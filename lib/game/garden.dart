@@ -21,10 +21,12 @@ class GardenState {
     Map<int, String>? lastCrops,
     Map<String, int>? harvested,
     Map<String, int>? boosts,
+    Set<String>? unlockRewardsPaid,
   })  : planted = planted ?? {},
         lastCrops = lastCrops ?? {},
         harvested = harvested ?? {},
-        boosts = boosts ?? {};
+        boosts = boosts ?? {},
+        unlockRewardsPaid = unlockRewardsPaid ?? {};
 
   /// Plots bought with Golden Eggs on top of the starter plots.
   int extraPlots;
@@ -42,6 +44,13 @@ class GardenState {
   /// Harvested boosts waiting to be used, by boost id.
   final Map<String, int> boosts;
 
+  /// Crops whose one-time unlock reward has been paid.
+  final Set<String> unlockRewardsPaid;
+
+  /// Unlock rewards just paid, waiting for the screen to announce them.
+  /// Not saved.
+  final List<({String cropName, double soulEggs})> newUnlockRewards = [];
+
   void reset() {
     extraPlots = 0;
     lastSeenMs = 0;
@@ -49,6 +58,8 @@ class GardenState {
     lastCrops.clear();
     harvested.clear();
     boosts.clear();
+    unlockRewardsPaid.clear();
+    newUnlockRewards.clear();
   }
 
   /// Reads saved garden data; a save from before the Garden has none.
@@ -115,6 +126,10 @@ class GardenState {
         for (final entry in object('boosts').entries)
           entry.key: count(entry.value),
       },
+      unlockRewardsPaid: {
+        for (final id in value['unlockRewardsPaid'] as List<Object?>? ?? [])
+          if (id is String) id,
+      },
     );
   }
 
@@ -133,6 +148,7 @@ class GardenState {
         },
         'harvested': harvested,
         'boosts': boosts,
+        'unlockRewardsPaid': unlockRewardsPaid.toList(),
       };
 }
 
@@ -217,8 +233,36 @@ extension Garden on GameEngine {
         final boostId = harvested.boostId!;
         _garden.boosts[boostId] = ownedGardenBoosts(boostId) + 1;
     }
+    _payUnlockRewards(harvested.id);
     return true;
   }
+
+  /// Pays the one-time reward of every crop this harvest count has unlocked.
+  /// Checked on each harvest, so a count reached before the reward existed
+  /// still pays on the next one.
+  void _payUnlockRewards(String harvestedCropId) {
+    for (final next in _config.crops) {
+      if (next.unlockCropId != harvestedCropId ||
+          cropHarvested(harvestedCropId) < next.unlockHarvests ||
+          !_garden.unlockRewardsPaid.add(next.id)) {
+        continue;
+      }
+      final reward = unlockReward(next);
+      if (reward > 0) {
+        state.soulEggs += reward;
+        _garden.newUnlockRewards.add((cropName: next.name, soulEggs: reward));
+      }
+    }
+  }
+
+  /// Soul Eggs that unlocking [crop] would pay right now.
+  double unlockReward(CropData crop) => math
+      .max(
+        crop.unlockRewardSoulEggFloor,
+        (state.soulEggs * crop.unlockRewardSoulEggPercent / 100)
+            .floorToDouble(),
+      )
+      .toDouble();
 
   /// Clears a withered crop for free; it yields nothing.
   bool clearPlot(int plot, int nowMs) {

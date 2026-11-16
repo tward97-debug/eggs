@@ -1,5 +1,5 @@
 {
- "_note": "All Garden tuning lives here. Plot prices are in Golden Eggs and run in a straight line from the first extra plot to the last. Soul Egg amounts and unlock counts are TUNABLE. Candy Corn's amount is Prophecy-Egg-equivalents per unit: 8 plots harvested daily for a year (2920 units) is worth about 120.",
+ "_note": "All Garden tuning lives here. Plot prices are in Golden Eggs and run in a straight line from the first extra plot to the last. Soul Egg amounts, unlock counts and unlock rewards are TUNABLE. Unlocking a crop pays a one-time reward: that percent of the Soul Eggs you hold, or the floor if that is more. Candy Corn's amount is Prophecy-Egg-equivalents per unit: 8 plots harvested daily for a year (2920 units) is worth about 120.",
  "starterPlots": 8,
  "maxPlots": 24,
  "firstPlotPriceGoldenEggs": 5,
@@ -8,11 +8,11 @@
  "witherWarningMinutes": 15,
  "seedCostEarningsSeconds": 90,
  "crops": [
-  {"id":"corn","name":"Corn","growHours":6,"reward":"soulEggs","amount":1},
-  {"id":"crazy_corn","name":"Crazy Corn","growHours":8,"reward":"soulEggs","amount":3,"unlockCropId":"corn","unlockHarvests":32},
-  {"id":"super_corn","name":"Super Corn","growHours":12,"reward":"soulEggs","amount":10,"unlockCropId":"crazy_corn","unlockHarvests":48},
-  {"id":"super_crazy_corn","name":"Super Crazy Corn","growHours":16,"reward":"soulEggs","amount":30,"unlockCropId":"super_corn","unlockHarvests":64},
-  {"id":"candy_corn","name":"Candy Corn","growHours":24,"reward":"earningsBonus","amount":0.0411,"unlockCropId":"super_crazy_corn","unlockHarvests":40},
+  {"id":"corn","name":"Corn","growHours":6,"reward":"soulEggs","amount":0.1},
+  {"id":"crazy_corn","name":"Crazy Corn","growHours":8,"reward":"soulEggs","amount":0.1,"unlockCropId":"corn","unlockHarvests":32,"unlockRewardSoulEggPercent":10,"unlockRewardSoulEggFloor":1},
+  {"id":"super_corn","name":"Super Corn","growHours":12,"reward":"soulEggs","amount":0.1,"unlockCropId":"crazy_corn","unlockHarvests":48,"unlockRewardSoulEggPercent":20,"unlockRewardSoulEggFloor":2},
+  {"id":"super_crazy_corn","name":"Super Crazy Corn","growHours":16,"reward":"soulEggs","amount":0.1,"unlockCropId":"super_corn","unlockHarvests":64,"unlockRewardSoulEggPercent":30,"unlockRewardSoulEggFloor":4},
+  {"id":"candy_corn","name":"Candy Corn","growHours":24,"reward":"earningsBonus","amount":0.0411,"unlockCropId":"super_crazy_corn","unlockHarvests":40,"unlockRewardSoulEggPercent":40,"unlockRewardSoulEggFloor":8},
   {"id":"feed_grain","name":"Feed Grain","growHours":24,"reward":"boost","boostId":"best_bird_feed"},
   {"id":"prism_flower","name":"Prism Flower","growHours":24,"reward":"boost","boostId":"tachyon_prism"},
   {"id":"beacon_bloom","name":"Beacon Bloom","growHours":24,"reward":"boost","boostId":"boost_beacon"},

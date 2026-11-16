@@ -60,7 +60,7 @@ void main() {
     expect(engine.harvestPlot(0, 5 * _hour), isFalse);
     expect(engine.harvestPlot(0, 6 * _hour), isTrue);
     expect(engine.harvestPlot(0, 6 * _hour), isFalse);
-    expect(engine.state.soulEggs, 1);
+    expect(engine.state.soulEggs, engine.crop('corn').amount);
     expect(engine.cropHarvested('corn'), 1);
   });
 
@@ -93,6 +93,59 @@ void main() {
     engine.state.garden.harvested['corn'] = crazyCorn.unlockHarvests;
     expect(engine.isCropUnlocked(crazyCorn), isTrue);
     expect(engine.plantCrop(0, 'crazy_corn', 0), isTrue);
+  });
+
+  test('unlocking a crop pays a one-time share of the Soul Eggs held', () {
+    final crazyCorn = engine.crop('crazy_corn');
+    engine.state.soulEggs = 1000;
+    engine.state.garden.harvested['corn'] = crazyCorn.unlockHarvests - 2;
+
+    void harvestCorn() {
+      engine.plantCrop(0, 'corn', 0);
+      expect(engine.harvestPlot(0, 6 * _hour), isTrue);
+    }
+
+    harvestCorn();
+    expect(engine.state.garden.newUnlockRewards, isEmpty);
+
+    final before = engine.state.soulEggs + engine.crop('corn').amount;
+    final reward =
+        (before * crazyCorn.unlockRewardSoulEggPercent / 100).floorToDouble();
+    harvestCorn();
+    expect(engine.state.soulEggs, closeTo(before + reward, 1e-9));
+    expect(engine.state.garden.newUnlockRewards.single.cropName, 'Crazy Corn');
+    expect(engine.state.garden.newUnlockRewards.single.soulEggs, reward);
+
+    // Only once, and the saved game remembers it.
+    harvestCorn();
+    expect(engine.state.garden.newUnlockRewards, hasLength(1));
+    final json =
+        jsonDecode(jsonEncode(engine.state.toJson())) as Map<String, Object?>;
+    expect(
+      GameState.fromJson(json, data).garden.unlockRewardsPaid,
+      {'crazy_corn'},
+    );
+  });
+
+  test('a small Soul Egg balance gets the floor reward, even late', () {
+    final crazyCorn = engine.crop('crazy_corn');
+    // Already past the count, as for a save from before rewards existed.
+    engine.state.garden.harvested['corn'] = crazyCorn.unlockHarvests + 5;
+
+    engine.plantCrop(0, 'corn', 0);
+    engine.harvestPlot(0, 6 * _hour);
+
+    expect(
+      engine.state.garden.newUnlockRewards.single.soulEggs,
+      crazyCorn.unlockRewardSoulEggFloor,
+    );
+    expect(
+      engine.state.soulEggs,
+      closeTo(
+        engine.crop('corn').amount + crazyCorn.unlockRewardSoulEggFloor,
+        1e-9,
+      ),
+    );
   });
 
   test('extra plots cost 5 to 1000 Golden Eggs in a straight line', () {
@@ -188,7 +241,7 @@ void main() {
     const now = 6 * _hour + 50 * _minute;
 
     expect(engine.harvestAll(now), 1);
-    expect(engine.state.soulEggs, 1);
+    expect(engine.state.soulEggs, engine.crop('corn').amount);
     expect(engine.plotStatus(0, now), PlotStatus.empty);
     expect(engine.plotStatus(2, now), PlotStatus.growing);
 

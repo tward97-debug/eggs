@@ -336,6 +336,8 @@ class CropData {
     required this.boostId,
     required this.unlockCropId,
     required this.unlockHarvests,
+    required this.unlockRewardSoulEggPercent,
+    required this.unlockRewardSoulEggFloor,
   });
 
   final String id;
@@ -353,6 +355,11 @@ class CropData {
   final String? unlockCropId;
   final int unlockHarvests;
 
+  /// One-time reward for unlocking this crop: this percent of the Soul Eggs
+  /// held at that moment, or the floor if that is more.
+  final double unlockRewardSoulEggPercent;
+  final double unlockRewardSoulEggFloor;
+
   factory CropData.fromJson(Object? value) {
     final json = _asObject(value);
     final reward = _requiredString(json, 'reward');
@@ -367,6 +374,10 @@ class CropData {
       unlockHarvests: json.containsKey('unlockCropId')
           ? _requiredInteger(json, 'unlockHarvests')
           : 0,
+      unlockRewardSoulEggPercent:
+          (json['unlockRewardSoulEggPercent'] as num? ?? 0).toDouble(),
+      unlockRewardSoulEggFloor:
+          (json['unlockRewardSoulEggFloor'] as num? ?? 0).toDouble(),
     );
   }
 }
