@@ -13,6 +13,8 @@ import '../game/format_number.dart' as number_format;
 import 'farm_view.dart';
 import 'research_effect_description.dart';
 import 'game_session.dart';
+import 'garden_notifications.dart';
+import 'garden_view.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({
@@ -574,6 +576,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     (1, 'Research', Icons.science_outlined),
     (4, 'Boosts', Icons.bolt_outlined),
     (2, 'Prestige', Icons.auto_awesome_outlined),
+    (6, 'Garden', Icons.grass),
     (3, 'Trophies', Icons.emoji_events_outlined),
     (5, 'Settings', Icons.settings_outlined),
   ];
@@ -599,6 +602,12 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       _buildTrophiesPage(),
       _buildBoostsPage(),
       _buildSettingsPage(),
+      GardenView(
+        engine: _engine,
+        formatNumber: formatNumber,
+        nowMs: _engine.gardenNow(DateTime.now()),
+        onChanged: _onGardenChanged,
+      ),
     ];
     return PopScope(
       canPop: _selectedPage == 0,
@@ -1254,8 +1263,11 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         Card(
           child: ListTile(
             leading: const Icon(Icons.auto_awesome_outlined),
-            title: const Text('Prophecy Eggs'),
-            subtitle: Text(formatNumber(_engine.state.prophecyEggs)),
+            title: const Text('Garden bonus'),
+            subtitle: Text(
+              '×${formatNumber(math.pow(_engine.prophecyEggMultiplier, _engine.gardenBonusUnits).toDouble())} '
+              'on the Soul Egg bonus, grown from Candy Corn',
+            ),
           ),
         ),
         Card(
@@ -1269,11 +1281,10 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         ),
         Card(
           child: ListTile(
-            title: const Text('Prophecy Bonus'),
+            title: const Text('Candy Coating'),
             subtitle: Text(
               'Level ${_engine.epicResearchLevel('prophecy_bonus')} · '
-              '×${formatNumber(_engine.prophecyEggMultiplier)} per '
-              'Prophecy Egg',
+              'strengthens the garden bonus',
             ),
           ),
         ),
@@ -1432,19 +1443,34 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
               runSpacing: 8,
               children: [
                 for (final option in options)
-                  OutlinedButton(
-                    onPressed:
-                        _engine.state.goldenEggs >= _engine.boostPrice(option)
-                            ? () => _mutate(
-                                  () => _engine.buyBoost(boost.id, option.id),
-                                )
-                            : null,
-                    child: Text(
-                      '${option.label}\n'
-                      '${formatNumber(_engine.boostPrice(option))} GE',
-                      textAlign: TextAlign.center,
+                  if (option.gardenOnly)
+                    FilledButton.tonal(
+                      key: ValueKey('use-garden-boost-${boost.id}'),
+                      onPressed: _engine.ownedGardenBoosts(boost.id) > 0
+                          ? () => _mutate(
+                                () => _engine.useGardenBoost(boost.id),
+                              )
+                          : null,
+                      child: Text(
+                        '${option.label}\n'
+                        'Garden · ${_engine.ownedGardenBoosts(boost.id)} owned',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else
+                    OutlinedButton(
+                      onPressed:
+                          _engine.state.goldenEggs >= _engine.boostPrice(option)
+                              ? () => _mutate(
+                                    () => _engine.buyBoost(boost.id, option.id),
+                                  )
+                              : null,
+                      child: Text(
+                        '${option.label}\n'
+                        '${formatNumber(_engine.boostPrice(option))} GE',
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
               ],
             ),
           ],
@@ -1469,8 +1495,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
             leading: const Icon(Icons.emoji_events),
             title: const Text('Chicken-count trophies'),
             subtitle: Text(
-              'Owned: ${_engine.state.trophies.length} · '
-              'Prophecy Eggs: ${formatNumber(_engine.state.prophecyEggs)}',
+              'Owned: ${_engine.state.trophies.length}',
             ),
           ),
         ),
@@ -1520,17 +1545,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     if (goldenEggRewards != null && trophyIndex < goldenEggRewards.length) {
       return '+${formatNumber(goldenEggRewards[trophyIndex])} Golden Eggs';
     }
-    if (eggId == 'enlightenment' &&
-        trophyIndex <
-            BalanceConfig.enlightenmentTrophyProphecyEggRewards.length) {
-      return '+${formatNumber(BalanceConfig.enlightenmentTrophyProphecyEggRewards[trophyIndex])} '
-          'Prophecy Eggs';
-    }
-    if (trophyIndex == BalanceConfig.trophyTierNames.length - 1) {
-      final prophecyReward = BalanceConfig.prophecyEggTrophyReward(eggId);
-      return '+${formatNumber(prophecyReward)} Prophecy Eggs';
-    }
-    return 'Reward not listed on source page';
+    return 'No reward';
   }
 
   String _boostEffectLabel(String effect) => switch (effect) {
@@ -1612,8 +1627,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         title: const Text('Prestige and start over?'),
         content: Text(
           'You will gain ${formatNumber(gainedSoulEggs)} Soul Eggs. '
-          'Golden Eggs, Soul Eggs, Prophecy Eggs, epic research, and trophies '
-          'will be kept.',
+          'Golden Eggs, Soul Eggs, your garden, running boosts, epic research, '
+          'and trophies will be kept.',
         ),
         actions: [
           TextButton(
@@ -1635,6 +1650,14 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         _showPersistenceError(error);
       }
     }
+  }
+
+  /// Saves right away (crops are timestamps worth keeping) and reschedules
+  /// the ripen and wither alerts.
+  void _onGardenChanged({bool planted = false}) {
+    _session.refresh();
+    unawaited(_session.save().catchError(_showPersistenceError));
+    unawaited(GardenNotifications.sync(_engine, askPermission: planted));
   }
 
   void _mutate<T>(T Function() action) {

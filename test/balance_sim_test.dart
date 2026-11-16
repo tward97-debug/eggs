@@ -128,7 +128,6 @@ double? _secondsUntilNextEvent(
     final originalPrestigeEarnings = state.cashEarnedThisPrestige;
     final originalRunEarnings = state.cashEarnedThisRun;
     final originalGoldenEggs = state.goldenEggs;
-    final originalProphecyEggs = state.prophecyEggs;
     final originalTrophies = Set<String>.of(state.trophies);
     engine.tick(
       elapsedSeconds,
@@ -141,7 +140,6 @@ double? _secondsUntilNextEvent(
     state.cashEarnedThisPrestige = originalPrestigeEarnings;
     state.cashEarnedThisRun = originalRunEarnings;
     state.goldenEggs = originalGoldenEggs;
-    state.prophecyEggs = originalProphecyEggs;
     state.trophies
       ..clear()
       ..addAll(originalTrophies);
@@ -370,7 +368,6 @@ GameState _copyState(GameState state) => GameState(
       hatcheryStock: state.hatcheryStock,
       goldenEggs: state.goldenEggs,
       soulEggs: state.soulEggs,
-      prophecyEggs: state.prophecyEggs,
       eggIndex: state.eggIndex,
       siloCount: state.siloCount,
       hapticsEnabled: state.hapticsEnabled,

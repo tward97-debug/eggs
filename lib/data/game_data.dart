@@ -19,6 +19,7 @@ class GameDataLoader {
     final epicJson =
         _asObject(await _loadJson(assets, 'assets/data/epic_research.json'));
     final boostJson = await _loadJson(assets, 'assets/data/boosts.json');
+    final gardenJson = await _loadJson(assets, 'assets/data/garden.json');
 
     final data = GameData(
       habs: _parseList(habJson, HabData.fromJson),
@@ -37,6 +38,7 @@ class GameDataLoader {
         'common research tier unlocks',
       ),
       boosts: _parseList(boostJson, BoostData.fromJson),
+      garden: GardenData.fromJson(gardenJson),
     );
     data.validate();
     return data;

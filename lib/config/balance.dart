@@ -101,7 +101,8 @@ class BalanceConfig {
   /// TUNABLE: the "1 +" in the earnings-multiplier formula.
   static const double baseEarningsMultiplier = 1;
 
-  /// TUNABLE: base Prophecy Egg exponent before Prophecy Bonus research.
+  /// TUNABLE: earnings multiplier per Prophecy-Egg-equivalent grown in the
+  /// Garden, before Candy Coating research.
   static const double baseProphecyEggMultiplier = 1.05;
 
   /// PLACEHOLDER: regular drone arrival interval before random jitter.
@@ -207,31 +208,4 @@ class BalanceConfig {
     'aether': [3e3, 4e3, 5e3, 7e3, 10e3],
     'parallax': [3e3, 4e3, 5e3, 7e3, 10e3],
   };
-
-  /// Diamond Prophecy Egg rewards by egg ID (wiki data).
-  static const Map<String, double> trophyProphecyEggRewards = {
-    'edible': 5,
-    'superfood': 4,
-    'medical': 3,
-    'rocket_fuel': 2,
-    'super_material': 1,
-    'fusion': 1,
-    'quantum': 1,
-    'immortality': 1,
-    'tachyon': 1,
-    'eventide': 10,
-  };
-
-  /// PLACEHOLDER: later eggs grant one Prophecy Egg for their top trophy.
-  static double prophecyEggTrophyReward(String eggId) =>
-      trophyProphecyEggRewards[eggId] ?? 1;
-
-  /// Enlightenment trophy Prophecy Egg rewards by tier (wiki data).
-  static const List<double> enlightenmentTrophyProphecyEggRewards = [
-    1,
-    2,
-    3,
-    5,
-    10,
-  ];
 }

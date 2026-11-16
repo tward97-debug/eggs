@@ -142,7 +142,8 @@ void main() {
       expect(engine.state.vehicles, hasLength(1));
       expect(engine.state.commonResearchLevels, isEmpty);
       expect(engine.state.siloCount, BalanceConfig.initialSiloCount);
-      expect(engine.state.activeBoostSeconds, isEmpty);
+      // Boosts keep running through an egg upgrade.
+      expect(engine.state.activeBoostSeconds['earnings'], 30);
     });
 
     test('does not ascend before the next egg threshold', () {
@@ -479,31 +480,26 @@ void main() {
       expect(engine.buySilo(), isFalse);
     });
 
-    test('compounds earnings bonus with Prophecy Eggs', () {
+    test('compounds earnings bonus with harvested Candy Corn', () {
       final engine = GameEngine(data: data);
       engine.state.soulEggs = 100;
 
       expect(engine.earningsBonus, 10);
       expect(engine.earningsMultiplier, 11);
 
-      final baseEb = engine.earningsBonus;
-      engine.state.prophecyEggs = 2;
+      // 8 plots a day for a year is worth about 120 Prophecy Eggs.
+      engine.state.garden.harvested['candy_corn'] = 8 * 365;
+      expect(engine.gardenBonusUnits, closeTo(120, 0.1));
       expect(
         engine.earningsBonus,
-        closeTo(10 * math.pow(1.05, 2), 1e-9),
+        closeTo(10 * math.pow(1.05, engine.gardenBonusUnits), 1e-6),
       );
-      expect(engine.earningsBonus / baseEb, closeTo(math.pow(1.05, 2), 1e-9));
 
-      final ebBeforeProphecyBonus = engine.earningsBonus;
       engine.state.epicResearchLevels['prophecy_bonus'] = 5;
       expect(engine.prophecyEggMultiplier, 1.10);
       expect(
         engine.earningsBonus,
-        closeTo(10 * math.pow(1.10, 2), 1e-9),
-      );
-      expect(
-        engine.earningsBonus / ebBeforeProphecyBonus,
-        closeTo(math.pow(1.10 / 1.05, 2), 1e-9),
+        closeTo(10 * math.pow(1.10, engine.gardenBonusUnits), 1e-3),
       );
     });
 
@@ -539,7 +535,7 @@ void main() {
       engine.state.cashSpentThisRun = 789;
       engine.state.chickens = 25;
       engine.state.goldenEggs = 50;
-      engine.state.prophecyEggs = 2;
+      engine.state.garden.harvested['corn'] = 2;
       engine.state.eggIndex = 3;
       engine.state.commonResearchLevels['comfy_nests'] = 1;
       engine.state.epicResearchLevels['soul_food'] = 4;
@@ -560,9 +556,10 @@ void main() {
       expect(engine.state.habs.single.tierIndex, 0);
       expect(engine.state.vehicles.single.tierIndex, 0);
       expect(engine.state.commonResearchLevels, isEmpty);
-      expect(engine.state.activeBoostSeconds, isEmpty);
+      // Boosts and the garden carry over a prestige.
+      expect(engine.state.activeBoostSeconds['best_bird_feed'], 300);
       expect(engine.state.goldenEggs, 50);
-      expect(engine.state.prophecyEggs, 2);
+      expect(engine.state.garden.harvested['corn'], 2);
       expect(engine.epicResearchLevel('soul_food'), 4);
       expect(engine.state.trophies, contains('edible:trophy:2'));
     });
@@ -589,64 +586,11 @@ void main() {
 
       expect(engine.state.trophies, hasLength(5));
       expect(engine.state.soulEggs, 10.112e9);
-      expect(engine.state.prophecyEggs, 5);
 
       engine.tick(1);
 
       expect(engine.state.trophies, hasLength(5));
       expect(engine.state.soulEggs, 10.112e9);
-      expect(engine.state.prophecyEggs, 5);
-    });
-
-    test('top trophy awards the configured Prophecy Egg reward per egg', () {
-      final engine = GameEngine(data: data);
-      engine.state.habs
-        ..clear()
-        ..addAll([
-          const HabOwnership(18, 0),
-          const HabOwnership(18, 1),
-          const HabOwnership(18, 2),
-          const HabOwnership(18, 3),
-        ]);
-      for (final item in data.commonResearch) {
-        if (item.effect.contains('habCapacity') ||
-            item.effect.contains('portalHabCapacity')) {
-          engine.state.commonResearchLevels[item.id] = item.maxLevel;
-        }
-      }
-
-      // The final egg pays a Prophecy Egg reward at every trophy tier.
-      for (var index = 0; index < data.eggs.length - 1; index++) {
-        engine.state.eggIndex = index;
-        engine.state.chickens = engine.trophyChickenCountThreshold(
-          BalanceConfig.trophyTierNames.length - 1,
-        );
-        final prophecyEggsBefore = engine.state.prophecyEggs;
-
-        engine.tick(1);
-
-        expect(
-          engine.state.prophecyEggs - prophecyEggsBefore,
-          BalanceConfig.prophecyEggTrophyReward(data.eggs[index].id),
-          reason: data.eggs[index].name,
-        );
-        expect(
-          engine.state.trophies,
-          contains(
-            '${data.eggs[index].id}:trophy:'
-            '${BalanceConfig.trophyTierNames.length - 1}',
-          ),
-        );
-      }
-
-      expect(BalanceConfig.prophecyEggTrophyReward('edible'), 5);
-      expect(BalanceConfig.prophecyEggTrophyReward('superfood'), 4);
-      expect(BalanceConfig.prophecyEggTrophyReward('medical'), 3);
-      expect(BalanceConfig.prophecyEggTrophyReward('rocket_fuel'), 2);
-      engine.state.eggIndex = data.eggs.length - 1;
-      final beforeFinalEgg = engine.state.prophecyEggs;
-      engine.tick(1);
-      expect(engine.state.prophecyEggs - beforeFinalEgg, 1 + 2 + 3 + 5 + 10);
     });
 
     test('uses the five fixed wiki chicken-count thresholds', () {
@@ -669,11 +613,6 @@ void main() {
       expect(
         BalanceConfig.trophyGoldenEggRewards['cinder'],
         [3e3, 4e3, 5e3, 10e3, 25e3],
-      );
-      expect(BalanceConfig.trophyProphecyEggRewards['edible'], 5);
-      expect(
-        BalanceConfig.enlightenmentTrophyProphecyEggRewards,
-        [1, 2, 3, 5, 10],
       );
     });
   });

@@ -60,10 +60,12 @@ tasks.configureEach {
 
 android {
     namespace = "com.triston.eggempire"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_local_notifications needs 37 or newer.
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -108,4 +110,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required by flutter_local_notifications for scheduled alerts.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

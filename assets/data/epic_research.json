@@ -179,7 +179,7 @@
   },
   {
    "id": "prophecy_bonus",
-   "name": "Prophecy Bonus",
+   "name": "Candy Coating",
    "effect": "prophecyBonus",
    "perLevel": 0.01,
    "maxLevel": 5,

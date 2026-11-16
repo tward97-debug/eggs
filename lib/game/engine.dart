@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import '../config/balance.dart';
+import 'garden.dart';
+export 'garden.dart';
 import 'models/game_data.dart';
 
 class DroneReward {
@@ -153,7 +155,8 @@ class GameEngine {
       eggValueMultiplier *
       earningsMultiplier;
 
-  /// Linear Soul Egg bonus compounded by Prophecy Eggs, per the project spec.
+  /// Linear Soul Egg bonus, compounded by the Garden's Candy Corn the way
+  /// Prophecy Eggs compound it in the original.
   double get perSoulEggEarningsBonus =>
       BalanceConfig.basePerSoulEggEarningsBonus +
       epicResearchEffect('soulFood');
@@ -165,7 +168,7 @@ class GameEngine {
   double get earningsBonus {
     return state.soulEggs *
         perSoulEggEarningsBonus *
-        math.pow(prophecyEggMultiplier, state.prophecyEggs).toDouble();
+        math.pow(prophecyEggMultiplier, gardenBonusUnits).toDouble();
   }
 
   /// Converts the compounding earnings bonus into the cash-rate multiplier.
@@ -207,7 +210,7 @@ class GameEngine {
     final option = boostOptions(boostId)
         .where((candidate) => candidate.id == optionId)
         .firstOrNull;
-    if (option == null) {
+    if (option == null || option.gardenOnly) {
       return false;
     }
     final price = boostPrice(option);
@@ -356,34 +359,12 @@ class GameEngine {
       }
       final soulEggRewards = BalanceConfig.trophySoulEggRewards[eggId];
       final goldenEggRewards = BalanceConfig.trophyGoldenEggRewards[eggId];
-      final prophecyReward = eggId == 'eventide'
-          ? null
-          : BalanceConfig.prophecyEggTrophyReward(eggId);
-      final enlightenmentRewards = eggId == 'eventide'
-          ? BalanceConfig.enlightenmentTrophyProphecyEggRewards
-          : null;
-      final hasReward = (soulEggRewards != null &&
-              index < soulEggRewards.length) ||
-          (goldenEggRewards != null && index < goldenEggRewards.length) ||
-          prophecyReward != null &&
-              index == BalanceConfig.trophyTierNames.length - 1 ||
-          enlightenmentRewards != null && index < enlightenmentRewards.length;
-      if (!hasReward) {
-        continue;
-      }
       state.trophies.add(trophyId);
       if (soulEggRewards != null && index < soulEggRewards.length) {
         state.soulEggs += soulEggRewards[index];
       }
       if (goldenEggRewards != null && index < goldenEggRewards.length) {
         state.goldenEggs += goldenEggRewards[index];
-      }
-      if (prophecyReward != null &&
-          index == BalanceConfig.trophyTierNames.length - 1) {
-        state.prophecyEggs += prophecyReward;
-      }
-      if (enlightenmentRewards != null && index < enlightenmentRewards.length) {
-        state.prophecyEggs += enlightenmentRewards[index];
       }
     }
   }
@@ -675,8 +656,6 @@ class GameEngine {
       ..add(const VehicleOwnership(0, 1, 0));
     state.commonResearchLevels.clear();
     state.siloCount = BalanceConfig.initialSiloCount;
-    state.activeBoostSeconds.clear();
-    state.activeBoostMultipliers.clear();
     state.runningChickenBatches.clear();
     return gainedSoulEggs;
   }
@@ -936,8 +915,6 @@ class GameEngine {
       ..add(const VehicleOwnership(0, 1, 0));
     state.commonResearchLevels.clear();
     state.siloCount = BalanceConfig.initialSiloCount;
-    state.activeBoostSeconds.clear();
-    state.activeBoostMultipliers.clear();
     state.runningChickenBatches.clear();
     return true;
   }
@@ -1349,19 +1326,20 @@ class GameState {
     this.goldenEggs = 0,
     this.piggyBankGoldenEggs = 0,
     this.soulEggs = 0,
-    this.prophecyEggs = 0,
     this.siloCount = BalanceConfig.initialSiloCount,
     this.hapticsEnabled = BalanceConfig.hapticFeedbackDefaultEnabled,
     Map<String, double>? activeBoostSeconds,
     Map<String, double>? activeBoostMultipliers,
     Set<String>? trophies,
     List<RunningChickenBatch>? runningChickenBatches,
+    GardenState? garden,
   })  : commonResearchLevels = commonResearchLevels ?? {},
         epicResearchLevels = epicResearchLevels ?? {},
         activeBoostSeconds = activeBoostSeconds ?? {},
         activeBoostMultipliers = activeBoostMultipliers ?? {},
         trophies = trophies ?? {},
-        runningChickenBatches = runningChickenBatches ?? [];
+        runningChickenBatches = runningChickenBatches ?? [],
+        garden = garden ?? GardenState();
 
   factory GameState.newGame() => GameState(
         habs: [const HabOwnership(0, 0)],
@@ -1378,7 +1356,6 @@ class GameState {
   double goldenEggs;
   double piggyBankGoldenEggs;
   double soulEggs;
-  double prophecyEggs;
   int eggIndex;
   int siloCount;
   bool hapticsEnabled;
@@ -1390,6 +1367,7 @@ class GameState {
   final Map<String, double> activeBoostMultipliers;
   final Set<String> trophies;
   final List<RunningChickenBatch> runningChickenBatches;
+  final GardenState garden;
 
   void resetToNewGame() {
     final fresh = GameState.newGame();
@@ -1402,7 +1380,6 @@ class GameState {
     goldenEggs = fresh.goldenEggs;
     piggyBankGoldenEggs = fresh.piggyBankGoldenEggs;
     soulEggs = fresh.soulEggs;
-    prophecyEggs = fresh.prophecyEggs;
     eggIndex = fresh.eggIndex;
     siloCount = fresh.siloCount;
     hapticsEnabled = fresh.hapticsEnabled;
@@ -1418,6 +1395,7 @@ class GameState {
     activeBoostMultipliers.clear();
     trophies.clear();
     runningChickenBatches.clear();
+    garden.reset();
   }
 
   factory GameState.fromJson(Map<String, Object?> json, GameData data) {
@@ -1491,7 +1469,6 @@ class GameState {
       goldenEggs: _readDouble(json, 'goldenEggs'),
       piggyBankGoldenEggs: _optionalDouble(json, 'piggyBankGoldenEggs'),
       soulEggs: _readDouble(json, 'soulEggs'),
-      prophecyEggs: _readDouble(json, 'prophecyEggs'),
       eggIndex: eggIndex,
       siloCount: _readInt(json, 'siloCount'),
       hapticsEnabled: _readBool(json, 'hapticsEnabled'),
@@ -1504,6 +1481,7 @@ class GameState {
           _optionalDoubleMap(json, 'activeBoostMultipliers'),
       trophies: _readStringSet(json, 'trophies'),
       runningChickenBatches: _optionalRunningChickenBatches(json),
+      garden: GardenState.fromJson(json['garden'], data),
     );
   }
 
@@ -1517,7 +1495,6 @@ class GameState {
         'goldenEggs': goldenEggs,
         'piggyBankGoldenEggs': piggyBankGoldenEggs,
         'soulEggs': soulEggs,
-        'prophecyEggs': prophecyEggs,
         'eggIndex': eggIndex,
         'siloCount': siloCount,
         'hapticsEnabled': hapticsEnabled,
@@ -1539,6 +1516,7 @@ class GameState {
         'activeBoostSeconds': activeBoostSeconds,
         'activeBoostMultipliers': activeBoostMultipliers,
         'trophies': trophies.toList(),
+        'garden': garden.toJson(),
         'runningChickenBatches': runningChickenBatches
             .map((batch) => {
                   'chickens': batch.chickens,

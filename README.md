@@ -43,3 +43,13 @@ Values marked TUNABLE or PLACEHOLDER in `lib/config/balance.dart` are our own
 `test/balance_sim_test.dart` is the pacing gate: a simulated player must reach
 each of the first three egg upgrades in 10 to 30 minutes. Run `flutter test`
 after any balance change.
+
+## Garden
+
+The Garden (More menu) replaces Prophecy Eggs. Crops grow in real time from a
+planting timestamp, are ready for 45 minutes, then wither. The four corn crops
+pay Soul Eggs, Candy Corn compounds the Soul Egg bonus (8 plots harvested
+daily for a year is worth about 120 Prophecy Eggs), and the four utility crops
+grow the strongest version of each boost, which can no longer be bought.
+All tuning is in `assets/data/garden.json`; the rules are in
+`lib/game/garden.dart` and tested in `test/garden_test.dart`.

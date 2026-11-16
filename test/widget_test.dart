@@ -210,6 +210,28 @@ void main() {
     expect(lockedRow, findsNothing);
   });
 
+  testWidgets('garden opens from More and plants a crop', (tester) async {
+    // A small phone, so an overflowing plot grid fails the test.
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpGame(tester);
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Garden'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tap to plant'), findsNWidgets(8));
+    await tester.tap(find.byKey(const ValueKey('garden-plot-0')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('0 / 32 Corn harvested'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plant-candy_corn')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('plant-corn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Tap to plant'), findsNWidgets(7));
+    expect(find.text('Corn'), findsOneWidget);
+  });
+
   testWidgets('haptic feedback setting is only shown in Settings',
       (tester) async {
     await pumpGame(tester);

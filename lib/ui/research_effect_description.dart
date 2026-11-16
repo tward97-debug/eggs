@@ -52,18 +52,15 @@ ResearchEffectDescription describeEffect(
   } else if (isPercent) {
     final perLevelPercent = item.perLevel * 100;
     final currentPercent = item.perLevel * level * 100;
-    perLevel =
-        '+${formatNumber(perLevelPercent)}% $effectNames per level';
-    currentTotal =
-        'Now: +${formatNumber(currentPercent)}% $effectNames';
+    perLevel = '+${formatNumber(perLevelPercent)}% $effectNames per level';
+    currentTotal = 'Now: +${formatNumber(currentPercent)}% $effectNames';
     nextTotal = level < item.maxLevel
         ? 'Next: +${formatNumber(item.perLevel * (level + 1) * 100)}% $effectNames'
         : null;
   } else {
     final unit = _effectDefinition(item.effect).unit;
     final amountDescription = unit.isEmpty ? effectNames : unit;
-    perLevel =
-        '+${formatNumber(item.perLevel)} $amountDescription per level';
+    perLevel = '+${formatNumber(item.perLevel)} $amountDescription per level';
     currentTotal =
         'Now: +${formatNumber(item.perLevel * level)} $amountDescription';
     nextTotal = level < item.maxLevel
@@ -142,8 +139,7 @@ _EffectDefinition _effectDefinition(String effect) {
     ),
     'vehicleCapacity':
         _EffectDefinition('vehicle capacity', 'Transport', isPercent: true),
-    'fleetSize':
-        _EffectDefinition('vehicle slots', 'Transport', unit: 'slots'),
+    'fleetSize': _EffectDefinition('vehicle slots', 'Transport', unit: 'slots'),
     'maxRunningBonus': _EffectDefinition(
       'maximum running-chicken bonus',
       'Running chickens',
@@ -217,7 +213,7 @@ _EffectDefinition _effectDefinition(String effect) {
       isPercent: true,
     ),
     'prophecyBonus': _EffectDefinition(
-      'earnings bonus per Prophecy Egg',
+      'Candy Corn bonus strength',
       'Prestige',
       isPercent: true,
     ),

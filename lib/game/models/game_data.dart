@@ -7,6 +7,7 @@ class GameData {
     required this.epicResearch,
     required this.commonResearchTierUnlocks,
     required this.boosts,
+    required this.garden,
   });
 
   final List<HabData> habs;
@@ -16,6 +17,7 @@ class GameData {
   final List<ResearchData> epicResearch;
   final List<int> commonResearchTierUnlocks;
   final List<BoostData> boosts;
+  final GardenData garden;
 
   void validate() {
     _requireUniqueIds(habs.map((item) => item.id), 'hab');
@@ -42,6 +44,7 @@ class GameData {
     if (boosts.any((boost) => boost.options.isEmpty)) {
       throw const FormatException('Every boost needs at least one option.');
     }
+    garden.validate(boosts);
   }
 }
 
@@ -227,11 +230,15 @@ class BoostOption {
     required this.multiplier,
     required this.priceGoldenEggs,
     required this.durationSeconds,
+    this.gardenOnly = false,
   });
 
   final String id;
   final String label;
   final double multiplier;
+
+  /// Grown in the Garden instead of bought with Golden Eggs.
+  final bool gardenOnly;
 
   /// Unscaled wiki price; the engine applies the Golden Egg cost scale.
   final double priceGoldenEggs;
@@ -245,6 +252,121 @@ class BoostOption {
       multiplier: _requiredNumber(json, 'multiplier'),
       priceGoldenEggs: _requiredNumber(json, 'priceGoldenEggs'),
       durationSeconds: _requiredNumber(json, 'durationSeconds'),
+      gardenOnly: json['gardenOnly'] == true,
+    );
+  }
+}
+
+class GardenData {
+  const GardenData({
+    required this.starterPlots,
+    required this.maxPlots,
+    required this.firstPlotPriceGoldenEggs,
+    required this.lastPlotPriceGoldenEggs,
+    required this.witherMinutes,
+    required this.witherWarningMinutes,
+    required this.seedCostEarningsSeconds,
+    required this.crops,
+  });
+
+  final int starterPlots;
+  final int maxPlots;
+  final double firstPlotPriceGoldenEggs;
+  final double lastPlotPriceGoldenEggs;
+
+  /// How long a ready crop waits before it withers.
+  final double witherMinutes;
+  final double witherWarningMinutes;
+
+  /// A seed costs this many seconds of current earnings.
+  final double seedCostEarningsSeconds;
+  final List<CropData> crops;
+
+  factory GardenData.fromJson(Object? value) {
+    final json = _asObject(value);
+    return GardenData(
+      starterPlots: _requiredInteger(json, 'starterPlots'),
+      maxPlots: _requiredInteger(json, 'maxPlots'),
+      firstPlotPriceGoldenEggs:
+          _requiredNumber(json, 'firstPlotPriceGoldenEggs'),
+      lastPlotPriceGoldenEggs: _requiredNumber(json, 'lastPlotPriceGoldenEggs'),
+      witherMinutes: _requiredNumber(json, 'witherMinutes'),
+      witherWarningMinutes: _requiredNumber(json, 'witherWarningMinutes'),
+      seedCostEarningsSeconds: _requiredNumber(json, 'seedCostEarningsSeconds'),
+      crops: _requiredList(json, 'crops')
+          .map(CropData.fromJson)
+          .toList(growable: false),
+    );
+  }
+
+  void validate(List<BoostData> boosts) {
+    _requireUniqueIds(crops.map((crop) => crop.id), 'crop');
+    if (starterPlots < 1 || maxPlots < starterPlots) {
+      throw const FormatException('Garden plot counts are invalid.');
+    }
+    for (final crop in crops) {
+      final unlock = crop.unlockCropId;
+      if (unlock != null && !crops.any((other) => other.id == unlock)) {
+        throw FormatException('Crop "${crop.id}" unlocks from unknown crop.');
+      }
+      if (!const {'soulEggs', 'earningsBonus', 'boost'}.contains(crop.reward)) {
+        throw FormatException('Crop "${crop.id}" has an unknown reward.');
+      }
+      if (crop.reward == 'boost' &&
+          !boosts.any(
+            (boost) =>
+                boost.id == crop.boostId &&
+                boost.options.any((option) => option.gardenOnly),
+          )) {
+        throw FormatException(
+          'Crop "${crop.id}" needs a boost with a gardenOnly option.',
+        );
+      }
+    }
+  }
+}
+
+class CropData {
+  const CropData({
+    required this.id,
+    required this.name,
+    required this.growHours,
+    required this.reward,
+    required this.amount,
+    required this.boostId,
+    required this.unlockCropId,
+    required this.unlockHarvests,
+  });
+
+  final String id;
+  final String name;
+  final double growHours;
+
+  /// 'soulEggs', 'earningsBonus' or 'boost'.
+  final String reward;
+
+  /// Soul Eggs, or Prophecy-Egg-equivalents, per harvested unit.
+  final double amount;
+  final String? boostId;
+
+  /// Unlocked after [unlockHarvests] lifetime harvests of this other crop.
+  final String? unlockCropId;
+  final int unlockHarvests;
+
+  factory CropData.fromJson(Object? value) {
+    final json = _asObject(value);
+    final reward = _requiredString(json, 'reward');
+    return CropData(
+      id: _requiredString(json, 'id'),
+      name: _requiredString(json, 'name'),
+      growHours: _requiredNumber(json, 'growHours'),
+      reward: reward,
+      amount: reward == 'boost' ? 1 : _requiredNumber(json, 'amount'),
+      boostId: reward == 'boost' ? _requiredString(json, 'boostId') : null,
+      unlockCropId: json['unlockCropId'] as String?,
+      unlockHarvests: json.containsKey('unlockCropId')
+          ? _requiredInteger(json, 'unlockHarvests')
+          : 0,
     );
   }
 }
