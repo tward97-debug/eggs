@@ -1,6 +1,6 @@
-# Egg Empire
+# Chickenville
 
-Egg Empire is a Flutter idle game for Android.
+Chickenville is a Flutter idle game for Android.
 
 ## Run locally
 

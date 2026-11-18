@@ -68,5 +68,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             build/app/outputs/flutter-apk/app-release.apk \
-            --title "Egg Empire $GITHUB_REF_NAME" \
+            --title "Chickenville $GITHUB_REF_NAME" \
             --generate-notes

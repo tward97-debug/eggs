@@ -248,37 +248,34 @@ class GameEngine {
         BalanceConfig.droneEpicWeightShiftPerEffect;
     final speedShift = speed * BalanceConfig.droneFastTapMaxWeightShift;
     final shift = epicShift + speedShift;
-    final rewards = isElite
-        ? BalanceConfig.eliteDroneGoldenEggRewards
-        : isGoldenEggReward
-            ? BalanceConfig.droneGoldenEggRewards
-            : BalanceConfig.droneCashRewardFractions;
-    final baseWeights = isElite
-        ? BalanceConfig.eliteDroneTierWeights
-        : isGoldenEggReward
-            ? BalanceConfig.droneGoldenEggTierWeights
-            : BalanceConfig.droneCashTierWeights;
-    final weights = _shiftDroneWeights(baseWeights, shift);
-    final rewardIndex = _weightedIndex(weights, tierRoll);
-
-    if (isGoldenEggReward) {
+    if (!isGoldenEggReward) {
       final reward = DroneReward(
-        goldenEggs: rewards[rewardIndex],
-        cash: 0,
-        isElite: isElite,
-        isGoldenEggReward: true,
+        goldenEggs: 0,
+        cash: cashPerSecond * BalanceConfig.droneCashRewardEarningsSeconds,
+        isElite: false,
+        isGoldenEggReward: false,
       );
-      state.goldenEggs += reward.goldenEggs;
+      _creditCash(reward.cash);
       return reward;
     }
 
-    final reward = DroneReward(
-      goldenEggs: 0,
-      cash: farmValue * rewards[rewardIndex],
-      isElite: false,
-      isGoldenEggReward: false,
+    final rewards = isElite
+        ? BalanceConfig.eliteDroneGoldenEggRewards
+        : BalanceConfig.droneGoldenEggRewards;
+    final weights = _shiftDroneWeights(
+      isElite
+          ? BalanceConfig.eliteDroneTierWeights
+          : BalanceConfig.droneGoldenEggTierWeights,
+      shift,
     );
-    _creditCash(reward.cash);
+    final rewardIndex = _weightedIndex(weights, tierRoll);
+    final reward = DroneReward(
+      goldenEggs: rewards[rewardIndex],
+      cash: 0,
+      isElite: isElite,
+      isGoldenEggReward: true,
+    );
+    state.goldenEggs += reward.goldenEggs;
     return reward;
   }
 
@@ -490,9 +487,6 @@ class GameEngine {
   /// Returns the next base-habitat price from its slot price table.
   double habPrice(int tierIndex, {int? slotIndex}) {
     _checkIndex(tierIndex, data.habs.length, 'hab tier');
-    if (tierIndex != 0) {
-      return double.infinity;
-    }
     final targetSlot = slotIndex ?? _nextFreeHabSlot();
     if (targetSlot < 0 ||
         targetSlot >= data.habs[tierIndex].slotPrices.length ||
@@ -881,7 +875,7 @@ class GameEngine {
 
   bool buyHab(int tierIndex, {int? slotIndex}) {
     _checkIndex(tierIndex, data.habs.length, 'hab tier');
-    if (tierIndex != 0 || state.habs.length >= BalanceConfig.maximumHabCount) {
+    if (state.habs.length >= BalanceConfig.maximumHabCount) {
       return false;
     }
     final targetSlot = slotIndex ?? _nextFreeHabSlot();

@@ -12,6 +12,8 @@ class FarmView extends StatelessWidget {
     required this.engine,
     required this.formatNumber,
     required this.droneVisible,
+    required this.droneWarning,
+    required this.dronePosition,
     required this.onCollectDrone,
     required this.onHatchStart,
     required this.onHatchStop,
@@ -28,6 +30,12 @@ class FarmView extends StatelessWidget {
 
   /// The drone hovers in one spot for its short visible window.
   final bool droneVisible;
+
+  /// A red dot marks the spot shortly before the drone appears.
+  final bool droneWarning;
+
+  /// Where in the scene the dot and then the drone show.
+  final Alignment dronePosition;
   final VoidCallback onCollectDrone;
   final VoidCallback onHatchStart;
   final VoidCallback onHatchStop;
@@ -187,25 +195,6 @@ class FarmView extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          if (droneVisible)
-            Align(
-              alignment: const Alignment(0, -0.55),
-              child: SizedBox(
-                width: BalanceConfig.droneButtonDiameter,
-                height: BalanceConfig.droneButtonDiameter,
-                child: FilledButton(
-                  key: const ValueKey('drone-button'),
-                  style: FilledButton.styleFrom(
-                    shape: const CircleBorder(),
-                    padding: EdgeInsets.zero,
-                    backgroundColor: Colors.deepOrange,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: onCollectDrone,
-                  child: const Icon(Icons.flight, semanticLabel: 'Drone'),
-                ),
-              ),
-            ),
           Align(
             alignment: const Alignment(0, -0.05),
             child: Row(
@@ -249,6 +238,42 @@ class FarmView extends StatelessWidget {
               child: Chip(
                 avatar: const Icon(Icons.directions_run, size: 18),
                 label: Text('×${formatNumber(runningBonus)}'),
+              ),
+            ),
+          if (droneVisible || droneWarning)
+            Align(
+              alignment: dronePosition,
+              child: SizedBox(
+                width: BalanceConfig.droneButtonDiameter,
+                height: BalanceConfig.droneButtonDiameter,
+                child: droneVisible
+                    ? FilledButton(
+                        key: const ValueKey('drone-button'),
+                        style: FilledButton.styleFrom(
+                          shape: const CircleBorder(),
+                          padding: EdgeInsets.zero,
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: onCollectDrone,
+                        child: const Icon(
+                          Icons.flight,
+                          semanticLabel: 'Drone',
+                        ),
+                      )
+                    : const Center(
+                        child: SizedBox(
+                          key: ValueKey('drone-warning'),
+                          width: BalanceConfig.droneWarningDotDiameter,
+                          height: BalanceConfig.droneWarningDotDiameter,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ),
         ],

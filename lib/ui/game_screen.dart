@@ -47,7 +47,7 @@ class _GameScreenState extends State<GameScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Egg Empire')),
+            appBar: AppBar(title: const Text('Chickenville')),
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -177,7 +177,7 @@ class _LoadedGameScreenState extends State<_LoadedGameScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Egg Empire')),
+            appBar: AppBar(title: const Text('Chickenville')),
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -243,6 +243,9 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       : BalanceConfig.droneSpawnIntervalSec;
   double _droneFlightDuration = 0;
   double _droneFlightElapsed = 0;
+  double _droneWarningRemaining = 0;
+  Alignment _dronePosition = Alignment.topCenter;
+  Timer? _holdBuyTimer;
 
   bool get _hasActiveDrone => _droneFlightDuration > 0;
   double get _droneFlightProgress => _hasActiveDrone
@@ -273,6 +276,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _gameTimer?.cancel();
+    _holdBuyTimer?.cancel();
     _stopwatch.stop();
     _session.onPersistenceError = null;
     unawaited(
@@ -304,6 +308,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     _gameTimer = null;
     _droneFlightDuration = 0;
     _droneFlightElapsed = 0;
+    _droneWarningRemaining = 0;
     _droneSecondsUntilSpawn = BalanceConfig.droneSpawnIntervalSec;
     _lifecycleWork = _lifecycleWork.then((_) => _pauseAndSave());
   }
@@ -500,10 +505,23 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       }
       return;
     }
+    if (_droneWarningRemaining > 0) {
+      _droneWarningRemaining -= elapsedSeconds;
+      if (_droneWarningRemaining <= 0) {
+        _droneWarningRemaining = 0;
+        _droneFlightDuration = BalanceConfig.droneFlightDurationSec;
+        _droneFlightElapsed = 0;
+      }
+      return;
+    }
     _droneSecondsUntilSpawn -= elapsedSeconds;
     if (_droneSecondsUntilSpawn <= 0) {
-      _droneFlightDuration = BalanceConfig.droneFlightDurationSec;
-      _droneFlightElapsed = 0;
+      // A random spot in the sky, clear of the chips along the top edge.
+      _dronePosition = Alignment(
+        _droneRandom.nextDouble() * 1.8 - 0.9,
+        -0.6 + _droneRandom.nextDouble() * 0.3,
+      );
+      _droneWarningRemaining = BalanceConfig.droneWarningSec;
     }
   }
 
@@ -515,8 +533,12 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     }
     final jitter = (2 * _droneRandom.nextDouble() - 1) *
         BalanceConfig.droneSpawnJitterFraction;
+    // The interval runs drone to drone, so take off the warning and the
+    // time the drone itself is on screen.
     _droneSecondsUntilSpawn =
-        BalanceConfig.droneSpawnIntervalSec * (1 + jitter);
+        BalanceConfig.droneSpawnIntervalSec * (1 + jitter) -
+            BalanceConfig.droneWarningSec -
+            BalanceConfig.droneFlightDurationSec;
   }
 
   void _collectDrone() {
@@ -587,6 +609,8 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
         engine: _engine,
         formatNumber: formatNumber,
         droneVisible: _hasActiveDrone,
+        droneWarning: _droneWarningRemaining > 0,
+        dronePosition: _dronePosition,
         onCollectDrone: _collectDrone,
         onHatchStart: _startHatching,
         onHatchStop: _session.stopHatching,
@@ -784,8 +808,9 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => FractionallySizedBox(
+      builder: (sheetContext) => ListenableBuilder(
+        listenable: _session,
+        builder: (context, _) => FractionallySizedBox(
           heightFactor: BalanceConfig.managementSheetHeightFraction,
           child: Column(
             children: [
@@ -832,7 +857,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   padding: const EdgeInsets.all(
                     BalanceConfig.managementMenuContentPadding,
                   ),
-                  children: children(setSheetState),
+                  children: children((update) => update()),
                 ),
               ),
             ],
@@ -856,14 +881,15 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
       subtitle: owned == null ? 'Tap to build' : capacity(owned.tierIndex),
       options: [
         if (owned == null)
-          _buildSlotOption(
-            keyName: 'buy-habitat-slot-$slot',
-            name: habs.first.name,
-            detail: capacity(0),
-            price: _engine.habPrice(0, slotIndex: slot),
-            buy: () => _engine.buyHab(0, slotIndex: slot),
-            setSheetState: setSheetState,
-          )
+          for (var tier = 0; tier < habs.length; tier++)
+            _buildSlotOption(
+              keyName: 'buy-habitat-slot-$slot-tier-$tier',
+              name: habs[tier].name,
+              detail: capacity(tier),
+              price: _engine.habPrice(tier, slotIndex: slot),
+              buy: () => _engine.buyHab(tier, slotIndex: slot),
+              setSheetState: setSheetState,
+            )
         else
           for (var tier = owned.tierIndex + 1; tier < habs.length; tier++)
             _buildSlotOption(
@@ -1099,7 +1125,7 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     required String currency,
     required bool maxed,
     required bool affordable,
-    required VoidCallback onBuy,
+    required bool Function() onBuy,
     String? lockedRequirement,
   }) {
     final description = describeEffect(
@@ -1203,9 +1229,14 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                   else
                     SizedBox(
                       height: BalanceConfig.researchButtonMinimumHeight,
-                      child: FilledButton(
-                        onPressed: affordable && !locked ? onBuy : null,
-                        child: const Text('Buy'),
+                      child: GestureDetector(
+                        onLongPressStart: (_) => _startHoldBuy(onBuy),
+                        onLongPressEnd: (_) => _holdBuyTimer?.cancel(),
+                        onLongPressCancel: () => _holdBuyTimer?.cancel(),
+                        child: FilledButton(
+                          onPressed: affordable && !locked ? onBuy : null,
+                          child: const Text('Buy'),
+                        ),
                       ),
                     ),
                 ],
@@ -1684,8 +1715,22 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
     }
   }
 
-  void _mutate<T>(T Function() action) {
-    action();
+  T _mutate<T>(T Function() action) {
+    final result = action();
     _session.refresh();
+    return result;
+  }
+
+  /// While a Buy button is held, keeps buying until released or unaffordable.
+  void _startHoldBuy(bool Function() buy) {
+    _holdBuyTimer?.cancel();
+    _holdBuyTimer = Timer.periodic(
+      const Duration(milliseconds: BalanceConfig.holdBuyRepeatMilliseconds),
+      (timer) {
+        if (!mounted || !buy()) {
+          timer.cancel();
+        }
+      },
+    );
   }
 }

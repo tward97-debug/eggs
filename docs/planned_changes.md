@@ -1,6 +1,6 @@
 # Planned changes
 
-Notes from Kaleb, 2026-11-17. Nothing here is built yet.
+Notes from Kaleb, 2026-11-17. All of these were built on 2026-11-17.
 
 ## Habitat and shipping menus
 
@@ -35,5 +35,5 @@ Notes from Kaleb, 2026-11-17. Nothing here is built yet.
 
 - Rename the game from "Egg Empire" to "Chickenville".
 - Open point: the Android app id is `com.triston.eggempire`. Changing it would
-  make phones treat the game as a new app and lose the old save, so the plan
-  is to change only the visible name unless decided otherwise.
+  make phones treat the game as a new app and lose the old save, so only
+  the visible name was changed.

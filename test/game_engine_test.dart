@@ -702,12 +702,32 @@ void main() {
     });
   });
 
+  group('habitats of any tier', () {
+    test('an empty slot can be built with any habitat it can afford', () {
+      final engine = GameEngine(data: data);
+      final price = data.habs[3].slotPrices[1];
+      expect(engine.habPrice(3, slotIndex: 1), price);
+
+      engine.state.cash = price - 1;
+      expect(engine.buyHab(3, slotIndex: 1), isFalse);
+      engine.state.cash = price;
+      expect(engine.buyHab(3, slotIndex: 1), isTrue);
+      expect(engine.state.cash, 0);
+      expect(
+        engine.state.habs.any(
+          (hab) => hab.slotIndex == 1 && hab.tierIndex == 3,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('drones and boosts', () {
-    test('drone cash rewards use farm value and credit farm earnings', () {
+    test('drone cash rewards pay 20 seconds of current earnings', () {
       final engine = GameEngine(data: data);
       engine.state.chickens = 100;
-      final expected =
-          engine.farmValue * BalanceConfig.droneCashRewardFractions.last;
+      final expected = engine.cashPerSecond * 20;
+      expect(expected, greaterThan(0));
 
       final reward = engine.collectDrone(
         rewardRoll: 0.9,

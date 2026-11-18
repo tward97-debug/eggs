@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
-        android:label="Egg Empire"
+        android:label="Chickenville"
         android:icon="@drawable/ic_egg_empire"
         android:name="${applicationName}">
         <activity

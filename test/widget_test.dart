@@ -60,10 +60,21 @@ void main() {
     expect(find.textContaining('Slot '), findsNWidgets(4));
     expect(find.text('Slot 1 · Coop'), findsOneWidget);
     expect(find.textContaining('chickens capacity'), findsWidgets);
-    expect(find.byKey(const ValueKey('buy-habitat-slot-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('buy-habitat-slot-1-tier-0')),
+      findsNothing,
+    );
     await tester.tap(find.text('Slot 2 · Empty'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('buy-habitat-slot-1')), findsOneWidget);
+    // Every habitat tier is offered on an empty slot.
+    expect(
+      find.byKey(const ValueKey('buy-habitat-slot-1-tier-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('buy-habitat-slot-1-tier-1')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Slot 1 · Coop'));
     await tester.pumpAndSettle();
     expect(
@@ -146,7 +157,12 @@ void main() {
   testWidgets('drone appears, claims its reward, and disappears',
       (tester) async {
     await pumpGame(tester, simulateDroneClockForTesting: true);
+    // A red dot marks the spot for a second before the drone shows.
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('drone-warning')), findsOneWidget);
+    expect(find.byKey(const ValueKey('drone-button')), findsNothing);
     await waitForDrone(tester);
+    expect(find.byKey(const ValueKey('drone-warning')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('drone-button')));
     await tester.pump();
@@ -230,6 +246,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Tap to plant'), findsNWidgets(7));
     expect(find.text('Corn'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('garden-goals')));
+    await tester.pumpAndSettle();
+    expect(find.text('Harvest 32 Corn'), findsOneWidget);
+    expect(find.textContaining('0 / 32 · unlocks Crazy Corn'), findsOneWidget);
+    expect(find.text('Harvest 40 Super Crazy Corn'), findsOneWidget);
   });
 
   testWidgets('haptic feedback setting is only shown in Settings',

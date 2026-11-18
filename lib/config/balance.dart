@@ -105,8 +105,16 @@ class BalanceConfig {
   /// Garden, before Candy Coating research.
   static const double baseProphecyEggMultiplier = 1.05;
 
-  /// PLACEHOLDER: regular drone arrival interval before random jitter.
-  static const double droneSpawnIntervalSec = 15;
+  /// TUNABLE: seconds from one drone to the next before random jitter
+  /// (12 seconds is 5 drones a minute on average).
+  static const double droneSpawnIntervalSec = 12;
+
+  /// TUNABLE: gap between purchases while a research Buy button is held.
+  static const int holdBuyRepeatMilliseconds = 100;
+
+  /// TUNABLE: how long the red dot shows before the drone appears.
+  static const double droneWarningSec = 1;
+  static const double droneWarningDotDiameter = 12;
 
   /// PLACEHOLDER: symmetric random jitter applied to drone arrival intervals.
   static const double droneSpawnJitterFraction = 0.30;
@@ -149,14 +157,8 @@ class BalanceConfig {
   static const List<double> droneGoldenEggRewards = [3, 6, 12];
   static const List<double> droneGoldenEggTierWeights = [70, 25, 5];
 
-  /// TUNABLE: wiki farm value is roughly a thousand minutes of income, so
-  /// drone cash is a small fraction of it.
-  static const List<double> droneCashRewardFractions = [
-    0.00001,
-    0.00005,
-    0.00025,
-  ];
-  static const List<double> droneCashTierWeights = [70, 25, 5];
+  /// TUNABLE: a cash drone pays this many seconds of current earnings.
+  static const double droneCashRewardEarningsSeconds = 20;
 
   /// PLACEHOLDER: elite drone Golden Egg outcomes and tier weights.
   static const List<double> eliteDroneGoldenEggRewards = [12, 48];

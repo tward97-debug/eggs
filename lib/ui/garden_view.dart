@@ -83,6 +83,12 @@ class GardenView extends StatelessWidget {
                     : null,
                 child: const Text('Replant same'),
               ),
+              OutlinedButton.icon(
+                key: const ValueKey('garden-goals'),
+                onPressed: () => _showGoals(context),
+                icon: const Icon(Icons.emoji_events_outlined),
+                label: const Text('Goals'),
+              ),
               OutlinedButton(
                 key: const ValueKey('garden-buy-plot'),
                 onPressed: engine.state.goldenEggs >= plotPrice
@@ -183,6 +189,58 @@ class GardenView extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Progress toward each harvest count that unlocks the next crop.
+  Future<void> _showGoals(BuildContext context) {
+    final paid = engine.state.garden.unlockRewardsPaid;
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Garden goals'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final next in engine.data.garden.crops)
+                if (next.unlockCropId case final cropId?)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      engine.isCropUnlocked(next)
+                          ? Icons.emoji_events
+                          : Icons.emoji_events_outlined,
+                    ),
+                    title: Text(
+                      'Harvest ${next.unlockHarvests} ${engine.crop(cropId).name}',
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LinearProgressIndicator(
+                          value: (engine.cropHarvested(cropId) /
+                                  next.unlockHarvests)
+                              .clamp(0.0, 1.0),
+                        ),
+                        Text(
+                          '${math.min(engine.cropHarvested(cropId), next.unlockHarvests)} / '
+                          '${next.unlockHarvests} · unlocks ${next.name}'
+                          '${paid.contains(next.id) ? ' · reward claimed' : next.unlockRewardSoulEggPercent > 0 ? ' · reward +${formatNumber(next.unlockRewardSoulEggPercent)}% Soul Eggs' : ''}',
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
