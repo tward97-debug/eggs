@@ -670,7 +670,7 @@ void main() {
       expect(engine.cashPerSecond, engine.incomePerSecondWithoutBoosts);
     });
 
-    test('Piggy Bank accrues on purchases and can be cracked', () {
+    test('Piggy Bank accrues on purchases but stays locked', () {
       final engine = GameEngine(data: data);
       engine.state.cash = 1000;
       engine.state.goldenEggs = 100;
@@ -694,12 +694,23 @@ void main() {
       final expectedStored = BalanceConfig.piggyBankHabReward +
           BalanceConfig.piggyBankResearchReward +
           BalanceConfig.piggyBankBoostReward;
-      expect(engine.crackPiggyBank(), isTrue);
-      expect(
-          engine.state.goldenEggs, closeTo(100 - 0.5 + expectedStored, 1e-9));
-      expect(engine.state.piggyBankGoldenEggs, 0);
+      expect(BalanceConfig.piggyBankLocked, isTrue);
       expect(engine.crackPiggyBank(), isFalse);
+      expect(engine.state.goldenEggs, closeTo(100 - 8, 1e-9));
+      expect(engine.state.piggyBankGoldenEggs, closeTo(expectedStored, 1e-9));
     });
+  });
+
+  test('shop boosts cost 8, 24, 48 Golden Eggs and up', () {
+    final engine = GameEngine(data: data);
+    for (final boost in data.boosts) {
+      final prices = [
+        for (final option in boost.options)
+          if (!option.gardenOnly) engine.boostPrice(option),
+      ];
+      expect(prices, [8, 24, 48, 96, 192].take(prices.length),
+          reason: boost.id);
+    }
   });
 
   group('habitats of any tier', () {
@@ -795,7 +806,7 @@ void main() {
       expect(engine.cashPerSecond, closeTo(baseIncome * 3, 1e-9));
       expect(engine.buyBoost('boost_beacon', beaconOption.id), isTrue);
       expect(engine.cashPerSecond, closeTo(baseIncome * 6, 1e-9));
-      expect(engine.state.goldenEggs, closeTo(1000 - 0.5 - 10, 1e-9));
+      expect(engine.state.goldenEggs, closeTo(1000 - 8 - 8, 1e-9));
 
       engine.tick(2000);
 

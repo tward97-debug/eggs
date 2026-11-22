@@ -42,10 +42,16 @@ class BalanceConfig {
   static const double runningChickenBonusPerChicken = 0.01;
   static const double baseMaximumRunningChickenBonus = 5;
   static const bool piggyBankEnabled = true;
-  static const double piggyBankResearchReward = 3;
-  static const double piggyBankVehicleReward = 20;
-  static const double piggyBankHabReward = 25;
-  static const double piggyBankBoostReward = 25;
+
+  /// The Piggy Bank still fills but cannot be opened for now: opening it
+  /// handed out enough Golden Eggs to break the game.
+  static const bool piggyBankLocked = true;
+
+  /// TUNABLE: Golden Eggs the Piggy Bank gains per purchase.
+  static const double piggyBankResearchReward = 0.1;
+  static const double piggyBankVehicleReward = 0.5;
+  static const double piggyBankHabReward = 0.5;
+  static const double piggyBankBoostReward = 1;
   static const String numberFormatPreferenceKey = 'number_format_scientific';
   static const String offlineSummaryPreferenceKey = 'show_offline_summary';
   static const bool showOfflineSummaryDefault = true;

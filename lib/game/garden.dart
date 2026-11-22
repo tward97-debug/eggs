@@ -200,6 +200,15 @@ extension Garden on GameEngine {
     return required == null || cropHarvested(required) >= crop.unlockHarvests;
   }
 
+  /// The crop that [cropId]'s harvest goal has unlocked, if it is done.
+  CropData? _successor(String cropId) => _config.crops
+      .where((crop) => crop.unlockCropId == cropId && isCropUnlocked(crop))
+      .firstOrNull;
+
+  /// A crop is retired once the crop it unlocks is available: there is no
+  /// reason left to plant it.
+  bool isCropRetired(CropData crop) => _successor(crop.id) != null;
+
   /// Seed price in cash: a fixed number of seconds of current earnings.
   double get seedCost => cashPerSecond * _config.seedCostEarningsSeconds;
 
@@ -289,7 +298,11 @@ extension Garden on GameEngine {
   int replantAll(int nowMs) {
     var planted = 0;
     for (var plot = 0; plot < gardenPlotCount; plot++) {
-      final cropId = _garden.lastCrops[plot];
+      var cropId = _garden.lastCrops[plot];
+      // A retired crop is replanted as the crop that replaced it.
+      while (cropId != null && _successor(cropId) != null) {
+        cropId = _successor(cropId)!.id;
+      }
       if (cropId != null && plantCrop(plot, cropId, nowMs)) {
         planted++;
       }

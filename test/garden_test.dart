@@ -148,6 +148,23 @@ void main() {
     );
   });
 
+  test('a corn crop is retired once the next one is unlocked', () {
+    final corn = engine.crop('corn');
+    expect(engine.isCropRetired(corn), isFalse);
+    engine.plantCrop(0, 'corn', 0);
+    engine.state.garden.harvested['corn'] =
+        engine.crop('crazy_corn').unlockHarvests;
+
+    expect(engine.isCropRetired(corn), isTrue);
+    expect(engine.isCropRetired(engine.crop('crazy_corn')), isFalse);
+    expect(engine.isCropRetired(engine.crop('soul_root')), isFalse);
+
+    // "Replant same" moves the plot on to the crop that replaced it.
+    engine.harvestAll(6 * _hour);
+    expect(engine.replantAll(6 * _hour), 1);
+    expect(engine.state.garden.planted[0]!.cropId, 'crazy_corn');
+  });
+
   test('extra plots cost 5 to 1000 Golden Eggs in a straight line', () {
     expect(engine.gardenPlotCount, 8);
     expect(engine.buyPlot(), isFalse);

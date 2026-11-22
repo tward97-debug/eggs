@@ -263,7 +263,8 @@ class GardenView extends StatelessWidget {
             ),
           ),
           for (final crop in engine.data.garden.crops)
-            _buildCropOption(sheetContext, plot, crop, affordable),
+            if (!engine.isCropRetired(crop))
+              _buildCropOption(sheetContext, plot, crop, affordable),
         ],
       ),
     );

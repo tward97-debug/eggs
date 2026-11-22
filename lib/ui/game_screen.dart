@@ -1277,7 +1277,12 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
             title: const Text('Soul Eggs'),
             subtitle: Text(
               '${formatNumber(_engine.state.soulEggs)} owned · '
-              '${formatNumber(_engine.soulEggsGained)} gained on prestige',
+              '${formatNumber(_engine.soulEggsGained)} gained on prestige\n'
+              'Each Soul Egg adds '
+              '${formatNumber(_engine.perSoulEggEarningsBonus * 100)}% to all '
+              'earnings, forever. You get them by prestiging: the more cash '
+              'you earned since your last prestige, the more you get. Corn '
+              'in the Garden pays a few too.',
             ),
           ),
         ),
@@ -1287,36 +1292,54 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
             title: const Text('Earnings bonus'),
             subtitle: Text(
               '${formatNumber(_engine.earningsBonus * 100)}% bonus · '
-              '×${formatNumber(_engine.earningsMultiplier)} income',
+              '×${formatNumber(_engine.earningsMultiplier)} income\n'
+              'Your Soul Eggs and Garden bonus combined. It multiplies all '
+              'the cash your farm earns, and raises farm value so eggs '
+              'upgrade sooner.',
             ),
           ),
         ),
         Card(
           child: ListTile(
-            leading: const Icon(Icons.auto_awesome_outlined),
+            leading: const Icon(Icons.grass),
             title: const Text('Garden bonus'),
             subtitle: Text(
               '×${formatNumber(math.pow(_engine.prophecyEggMultiplier, _engine.gardenBonusUnits).toDouble())} '
-              'on the Soul Egg bonus, grown from Candy Corn',
+              'on the Soul Egg bonus\n'
+              'Every Candy Corn you harvest in the Garden multiplies your '
+              'Soul Egg bonus a little more, forever. It is never reset.',
             ),
           ),
         ),
         Card(
           child: ListTile(
+            leading: const Icon(Icons.restaurant_outlined),
             title: const Text('Soul Food'),
             subtitle: Text(
-              'Level ${_engine.epicResearchLevel('soul_food')} · '
-              '${formatNumber(_engine.perSoulEggEarningsBonus)} per Soul Egg',
+              'Level ${_engine.epicResearchLevel('soul_food')}\n'
+              'Epic research, bought with Golden Eggs on the Research page. '
+              'Each level makes every Soul Egg worth more.',
             ),
           ),
         ),
         Card(
           child: ListTile(
+            leading: const Icon(Icons.cake_outlined),
             title: const Text('Candy Coating'),
             subtitle: Text(
-              'Level ${_engine.epicResearchLevel('prophecy_bonus')} · '
-              'strengthens the garden bonus',
+              'Level ${_engine.epicResearchLevel('prophecy_bonus')}\n'
+              'Epic research, bought with Golden Eggs on the Research page. '
+              'Each level makes every Candy Corn harvest stronger.',
             ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+          child: Text(
+            'Prestiging restarts your farm at the first egg and pays the '
+            'Soul Eggs shown. You keep Golden Eggs, Soul Eggs, the Garden, '
+            'running boosts, epic research and trophies.',
+            key: ValueKey('prestige-explainer'),
           ),
         ),
         const SizedBox(height: 8),
@@ -1369,12 +1392,20 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
                     'Golden Eggs stored',
                   ),
                   const SizedBox(height: 8),
-                  FilledButton(
-                    onPressed: _engine.state.piggyBankGoldenEggs > 0
-                        ? () => _mutate(_engine.crackPiggyBank)
-                        : null,
-                    child: const Text('Crack Piggy Bank'),
-                  ),
+                  if (BalanceConfig.piggyBankLocked)
+                    const Text(
+                      'Locked. A bad chicken got into the Piggy Bank, and '
+                      'nobody is allowed near it until we know what it did. '
+                      'It keeps filling. One day it will open again...',
+                      key: ValueKey('piggy-bank-locked'),
+                    )
+                  else
+                    FilledButton(
+                      onPressed: _engine.state.piggyBankGoldenEggs > 0
+                          ? () => _mutate(_engine.crackPiggyBank)
+                          : null,
+                      child: const Text('Crack Piggy Bank'),
+                    ),
                 ],
               ),
             ),
@@ -1688,7 +1719,14 @@ class _RunningGameScreenState extends State<_RunningGameScreen>
   void _onGardenChanged({bool planted = false}) {
     _session.refresh();
     unawaited(_session.save().catchError(_showPersistenceError));
-    unawaited(GardenNotifications.sync(_engine, askPermission: planted));
+    unawaited(
+      GardenNotifications.sync(_engine, askPermission: planted).then((problem) {
+        if (problem != null && planted && mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(problem)));
+        }
+      }),
+    );
     final rewards = _engine.state.garden.newUnlockRewards;
     if (rewards.isNotEmpty) {
       final message = [

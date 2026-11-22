@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -9,9 +10,9 @@ class GardenNotifications {
   static bool _initialized = false;
 
   /// Replaces every scheduled alert with ones matching the current garden.
-  /// Alerts are best-effort: any failure (permission denied, no plugin in
-  /// tests) is ignored so it can never break the game.
-  static Future<void> sync(
+  /// Alerts are best-effort and can never break the game. Returns a message
+  /// for the player when alerts cannot work, otherwise null.
+  static Future<String?> sync(
     GameEngine engine, {
     bool askPermission = false,
   }) async {
@@ -25,10 +26,14 @@ class GardenNotifications {
         _initialized = true;
       }
       if (askPermission) {
-        await _plugin
+        final granted = await _plugin
             .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>()
             ?.requestNotificationsPermission();
+        if (granted == false) {
+          return 'Garden alerts are off. Allow notifications for '
+              'Chickenville in your phone settings to get them.';
+        }
       }
       await _plugin.cancelAll();
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -57,7 +62,13 @@ class GardenNotifications {
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         );
       }
-    } catch (_) {}
+      return null;
+    } on PlatformException catch (error) {
+      return 'Garden alerts are not working: ${error.message ?? error.code}';
+    } catch (_) {
+      // No notification plugin here (tests, unsupported platforms).
+      return null;
+    }
   }
 }
 

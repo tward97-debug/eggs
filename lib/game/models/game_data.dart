@@ -240,7 +240,7 @@ class BoostOption {
   /// Grown in the Garden instead of bought with Golden Eggs.
   final bool gardenOnly;
 
-  /// Unscaled wiki price; the engine applies the Golden Egg cost scale.
+  /// Price in Golden Eggs, charged as written.
   final double priceGoldenEggs;
   final double durationSeconds;
 

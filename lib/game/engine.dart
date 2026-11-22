@@ -224,8 +224,7 @@ class GameEngine {
     return true;
   }
 
-  double boostPrice(BoostOption option) =>
-      option.priceGoldenEggs * BalanceConfig.goldenEggCostScale;
+  double boostPrice(BoostOption option) => option.priceGoldenEggs;
 
   /// Rolls and credits a drone reward; each roll input is deterministic/testable.
   DroneReward collectDrone({
@@ -1041,7 +1040,9 @@ class GameEngine {
   }
 
   bool crackPiggyBank() {
-    if (!BalanceConfig.piggyBankEnabled || state.piggyBankGoldenEggs <= 0) {
+    if (!BalanceConfig.piggyBankEnabled ||
+        BalanceConfig.piggyBankLocked ||
+        state.piggyBankGoldenEggs <= 0) {
       return false;
     }
     state.goldenEggs += state.piggyBankGoldenEggs;
